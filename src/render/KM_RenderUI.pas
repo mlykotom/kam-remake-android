@@ -40,6 +40,8 @@ type
     class procedure SetupClipY (Y1,Y2: SmallInt);
     class procedure ReleaseClipX;
     class procedure ReleaseClipY;
+    class procedure PushScale(aOriginX, aOriginY: Integer; aScale: Single);
+    class procedure PopScale;
 
     class procedure Write3DButton  (aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word; aFlagColor: TColor4;
       aState: TKMButtonStateSet; aStyle: TKMButtonStyle; aImageEnabled: Boolean = True);
@@ -200,6 +202,23 @@ begin
   {$ENDIF}
     ReleaseY;
 end;
+
+
+class procedure TKMRenderUI.PushScale(aOriginX, aOriginY: Integer; aScale: Single);
+begin
+  glPushMatrix;
+  glTranslatef(aOriginX, aOriginY, 0);
+  glScalef(aScale, aScale, 1);
+  glTranslatef(-aOriginX, -aOriginY, 0);
+end;
+
+
+
+class procedure TKMRenderUI.PopScale;
+begin
+  glPopMatrix;
+end;
+
 
 
 class procedure TKMRenderUI.Write3DButton(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word; aFlagColor: TColor4; aState: TKMButtonStateSet; aStyle: TKMButtonStyle; aImageEnabled: Boolean = True);

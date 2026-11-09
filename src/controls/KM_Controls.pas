@@ -363,6 +363,11 @@ type
     procedure Paint; virtual;
     procedure UpdateState(aTickCount: Cardinal); virtual;
 
+    function EffectiveRenderScale: Single;
+    function ScaledOrigin: TKMPoint;
+    procedure ScreenToLocal(var aX, aY: Integer);
+    procedure LocalToScreen(var aX, aY: Integer);
+
     function ToStr: string;
   end;
 
@@ -373,6 +378,7 @@ type
   { Panel which keeps child items in it, it's virtual and invisible }
   TKMPanel = class(TKMControl)
   private
+    fRenderScale: Single;
     procedure Init;
   protected
     fMasterControl: TKMMasterControl;
@@ -402,7 +408,9 @@ type
     procedure ResetFocusedControlIndex;
 
     property MasterControl: TKMMasterControl read fMasterControl;
+    property RenderScale: Single read fRenderScale write fRenderScale;
 
+    function HitTest(X, Y: Integer; aIncludeDisabled: Boolean = False; aIncludeNotHitable: Boolean = False): Boolean; override;
     procedure Paint; override;
 
     procedure UpdateState(aTickCount: Cardinal); override;
@@ -1341,6 +1349,72 @@ begin
 end;
 
 
+function TKMControl.EffectiveRenderScale: Single;
+var
+  P: TKMPanel;
+begin
+  Result := 1;
+  if Self = nil then Exit;
+  if (Self is TKMPanel) and (TKMPanel(Self).RenderScale <> 1) then
+    Result := Result * TKMPanel(Self).RenderScale;
+  P := fParent;
+  while P <> nil do
+  begin
+    if P.RenderScale <> 1 then
+      Result := Result * P.RenderScale;
+    P := P.fParent;
+  end;
+end;
+
+
+function TKMControl.ScaledOrigin: TKMPoint;
+var
+  P: TKMPanel;
+begin
+  Result := KMPOINT_ZERO;
+  if Self = nil then Exit;
+  if (Self is TKMPanel) and (TKMPanel(Self).RenderScale <> 1) then
+    Exit(TKMPoint.New(AbsLeft, AbsTop));
+  P := fParent;
+  while P <> nil do
+  begin
+    if P.RenderScale <> 1 then
+      Exit(TKMPoint.New(P.AbsLeft, P.AbsTop));
+    P := P.fParent;
+  end;
+end;
+
+
+procedure TKMControl.ScreenToLocal(var aX, aY: Integer);
+var
+  s: Single;
+  orig: TKMPoint;
+begin
+  s := EffectiveRenderScale;
+  if s <> 1 then
+  begin
+    orig := ScaledOrigin;
+    aX := orig.X + Round((aX - orig.X) / s);
+    aY := orig.Y + Round((aY - orig.Y) / s);
+  end;
+end;
+
+
+procedure TKMControl.LocalToScreen(var aX, aY: Integer);
+var
+  s: Single;
+  orig: TKMPoint;
+begin
+  s := EffectiveRenderScale;
+  if s <> 1 then
+  begin
+    orig := ScaledOrigin;
+    aX := orig.X + Round((aX - orig.X) * s);
+    aY := orig.Y + Round((aY - orig.Y) * s);
+  end;
+end;
+
+
 function TKMControl.ToStr: string;
 begin
   if Self = nil then Exit('nil');
@@ -1372,6 +1446,7 @@ end;
 
 procedure TKMPanel.Init;
 begin
+  fRenderScale := 1;
   ResetFocusedControlIndex;
   PanelHandleMouseWheelByDefault := True; //Panels handle mousewheel by default
 end;
@@ -1649,10 +1724,24 @@ begin
 end;
 
 
+function TKMPanel.HitTest(X, Y: Integer; aIncludeDisabled: Boolean = False; aIncludeNotHitable: Boolean = False): Boolean;
+begin
+  if fRenderScale <> 1 then
+  begin
+    X := AbsLeft + Round((X - AbsLeft) / fRenderScale);
+    Y := AbsTop + Round((Y - AbsTop) / fRenderScale);
+  end;
+  Result := inherited HitTest(X, Y, aIncludeDisabled, aIncludeNotHitable);
+end;
+
+
 procedure TKMPanel.Paint;
 var
   I: Integer;
 begin
+  if fRenderScale <> 1 then
+    TKMRenderUI.PushScale(AbsLeft, AbsTop, fRenderScale);
+
   // Paint self (dev overlays)
   inherited;
 
@@ -1660,6 +1749,9 @@ begin
   for I := 0 to ChildCount - 1 do
     if Childs[I].fVisible then
       Childs[I].Paint;
+
+  if fRenderScale <> 1 then
+    TKMRenderUI.PopScale;
 end;
 
 
@@ -1876,11 +1968,19 @@ end;
 //For corners used actual corners with 1 px offset inside to solve border collisions
 //Use Self coordinates to check, because some controls can contain other sub-controls (f.e. TKMNumericEdit)
 function TKMMasterControl.IsCtrlCovered(aCtrl: TKMControl): Boolean;
+var
+  x1, y1, x2, y2: Integer;
 begin
-  Result := (HitControl(aCtrl.SelfAbsLeft + 1, aCtrl.SelfAbsTop + 1) <> aCtrl)
-        or (HitControl(aCtrl.SelfAbsLeft + aCtrl.SelfWidth - 1, aCtrl.SelfAbsTop + 1) <> aCtrl)
-        or (HitControl(aCtrl.SelfAbsLeft + 1, aCtrl.SelfAbsTop + aCtrl.SelfHeight - 1) <> aCtrl)
-        or (HitControl(aCtrl.SelfAbsLeft + aCtrl.SelfWidth - 1, aCtrl.SelfAbsTop + aCtrl.SelfHeight - 1) <> aCtrl);
+  x1 := aCtrl.SelfAbsLeft + 1;
+  y1 := aCtrl.SelfAbsTop + 1;
+  x2 := aCtrl.SelfAbsLeft + aCtrl.SelfWidth - 1;
+  y2 := aCtrl.SelfAbsTop + aCtrl.SelfHeight - 1;
+  aCtrl.LocalToScreen(x1, y1);
+  aCtrl.LocalToScreen(x2, y2);
+  Result := (HitControl(x1, y1) <> aCtrl)
+        or (HitControl(x2, y1) <> aCtrl)
+        or (HitControl(x1, y2) <> aCtrl)
+        or (HitControl(x2, y2) <> aCtrl);
 end;
 
 
@@ -1894,6 +1994,13 @@ function TKMMasterControl.HitControl(X,Y: Integer; aIncludeDisabled: Boolean = F
   begin
     // Could sometimes happen on game exit?
     if (Self = nil) or (P = nil) then Exit(nil);
+
+    if P.RenderScale <> 1 then
+    begin
+      aX := P.AbsLeft + Round((aX - P.AbsLeft) / P.RenderScale);
+      aY := P.AbsTop + Round((aY - P.AbsTop) / P.RenderScale);
+    end;
+
 
     Result := nil;
     //Process controls in reverse order since last created are on top
@@ -1982,7 +2089,7 @@ end;
 
 procedure TKMMasterControl.MouseDown(X,Y: Integer; Shift: TShiftState; Button: TMouseButton);
 var
-  I: Integer;
+  I, cX, cY: Integer;
 begin
   if Self = nil then Exit;
 
@@ -1995,13 +2102,18 @@ begin
 //  fMasterPanel.ControlMouseDown(CtrlDown, X, Y, Shift, Button);
 
   if CtrlDown <> nil then
-    CtrlDown.MouseDown(X, Y, Shift, Button);
+  begin
+    cX := X;
+    cY := Y;
+    CtrlDown.ScreenToLocal(cX, cY);
+    CtrlDown.MouseDown(cX, cY, Shift, Button);
+  end;
 end;
 
 
 procedure TKMMasterControl.MouseMove(X,Y: Integer; Shift: TShiftState);
 var
-  I: Integer;
+  I, cX, cY: Integer;
 begin
   if Self = nil then Exit;
 
@@ -2014,10 +2126,20 @@ begin
 
   //User is dragging some Ctrl (e.g. scrollbar) and went away from Ctrl bounds
   if (CtrlDown <> nil) and CtrlDown.Visible then
-    CtrlDown.MouseMove(X, Y, Shift)
+  begin
+    cX := X;
+    cY := Y;
+    CtrlDown.ScreenToLocal(cX, cY);
+    CtrlDown.MouseMove(cX, cY, Shift);
+  end
   else
   if CtrlOver <> nil then
-    CtrlOver.MouseMove(X, Y, Shift);
+  begin
+    cX := X;
+    cY := Y;
+    CtrlOver.ScreenToLocal(cX, cY);
+    CtrlOver.MouseMove(cX, cY, Shift);
+  end;
 
   //The Game hides cursor when using DirectionSelector, don't spoil it
   if gSystem.Cursor <> kmcInvisible then
@@ -2036,7 +2158,7 @@ end;
 
 procedure TKMMasterControl.MouseUp(X,Y: Integer; Shift: TShiftState; Button: TMouseButton);
 var
-  I: Integer;
+  I, cX, cY: Integer;
 begin
   CtrlUp := HitControl(X,Y);
 
@@ -2059,10 +2181,16 @@ begin
 //  fMasterPanel.ControlMouseUp(CtrlUp, X, Y, Shift, Button); // Must be invoked before CtrlUp.MouseUp to avoid problems on game Exit
 
   if CtrlUp <> nil then
-    CtrlUp.MouseUp(X, Y, Shift, Button);
+  begin
+    cX := X;
+    cY := Y;
+    CtrlUp.ScreenToLocal(cX, cY);
+    CtrlUp.MouseUp(cX, cY, Shift, Button);
+  end;
 
   //Do not place any code here, we could have Exited in OnClick event
 end;
+
 
 
 procedure TKMMasterControl.MouseWheel(X,Y: Integer; WheelSteps: Integer; var aHandled: Boolean);

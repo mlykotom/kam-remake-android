@@ -80,6 +80,7 @@ type
 
     fDefaultZoom: Single;
     fZoomBehaviour: TKMZoomBehaviour;
+    fSidebarScale: Single;
     fScrollSpeed: Single;
     fLocale: AnsiString;
     fSpeedPace: Word;
@@ -159,6 +160,7 @@ type
     //Menu
     procedure SetMenuFavouriteMapsStr(const aValue: UnicodeString);
 
+    procedure SetSidebarScale(const aValue: Single);
     procedure SetSpeedPace(const aValue: Word);
     function GetFavouriteMaps: TKMMapsCRCList;
     function GetAsyncGameResLoader: Boolean;
@@ -196,6 +198,7 @@ type
 
     property DefaultZoom: Single read fDefaultZoom;
     property ZoomBehaviour: TKMZoomBehaviour read fZoomBehaviour write fZoomBehaviour;
+    property SidebarScale: Single read fSidebarScale write SetSidebarScale;
     property ScrollSpeed: Single read fScrollSpeed write fScrollSpeed;
     property Locale: AnsiString read fLocale write SetLocale;
     property SpeedPace: Word read fSpeedPace write SetSpeedPace;
@@ -307,6 +310,7 @@ constructor TKMGameSettings.Create;
 begin
   inherited;
 
+  fSidebarScale := {$IFDEF ANDROID}1.5{$ELSE}1.0{$ENDIF};
   fWareDistribution := TKMWareDistribution.Create;
 
   fFavouriteMaps := TKMMapsCRCList.Create;
@@ -430,6 +434,7 @@ begin
     nUI := nGameCommon.AddOrFindChild('UI');
       fDefaultZoom    := nUI.Attributes['DefaultZoom'].AsFloat(1);
       fZoomBehaviour  := TKMZoomBehaviour(nUI.Attributes['ZoomBehaviour'].AsInteger(Ord(zbFull))); // Default zoom value is zbFull
+      SidebarScale    := nUI.Attributes['SidebarScale'].AsFloat({$IFDEF ANDROID}1.5{$ELSE}1.0{$ENDIF});
     // Speed
     nGameSpeed := nGameCommon.AddOrFindChild('Speed');
       fSpeedMedium    := nGameSpeed.Attributes['Medium'].AsFloat(3);
@@ -632,6 +637,7 @@ begin
     nUI := nGameCommon.AddOrFindChild('UI');
       nUI.Attributes['DefaultZoom']         := fDefaultZoom;
       nUI.Attributes['ZoomBehaviour']       := Integer(fZoomBehaviour);
+      nUI.Attributes['SidebarScale']        := fSidebarScale;
 
     // Speed
     nGameSpeed := nGameCommon.AddOrFindChild('Speed');
@@ -750,7 +756,14 @@ begin
 end;
 
 
+procedure TKMGameSettings.SetSidebarScale(const aValue: Single);
+begin
+  fSidebarScale := EnsureRange(aValue, 1.0, 2.0);
+end;
+
+
 procedure TKMGameSettings.SetLocale(const aLocale: AnsiString);
+
 begin
   //We can get some unsupported LocaleCode, but that is fine, it will have Eng fallback anyway
   fLocale := aLocale;

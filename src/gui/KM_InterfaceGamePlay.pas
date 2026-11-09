@@ -186,6 +186,7 @@ type
     procedure HandleFieldPlanKeys(Key: Word);
     procedure HandleDebugKeys(Key: Word);
   protected
+    Panel_Sidebar: TKMPanel;
     Sidebar_Top: TKMImage;
     Sidebar_Middle: TKMImage;
     Sidebar_Bottom: array of TKMImage;
@@ -811,6 +812,9 @@ procedure TKMGamePlayInterface.GameOptionsChanged;
 var
   oldIndex: Integer;
 begin
+  if Panel_Sidebar.RenderScale <> gGameSettings.SidebarScale then
+    Resize(fViewport.ViewRect.Right, fViewport.ViewRect.Bottom);
+
   oldIndex := Radio_PlayersColorMode.ItemIndex;
   //Update player color mode radio
   Radio_PlayersColorMode.ItemIndex := Byte(gGameSettings.PlayersColorMode) - 1; // -1 for the pcmNone
@@ -860,10 +864,12 @@ begin
 
   Label_TeamName := TKMLabel.Create(Panel_Main, 0, 0, '', fntGrey, taCenter);
 
-  Sidebar_Top       := TKMImage.Create(Panel_Main, 0,    0, 224, 200, 407);
-  Sidebar_Middle    := TKMImage.Create(Panel_Main, 0,  200, 224, 168, 554);
+  Panel_Sidebar     := TKMPanel.Create(Panel_Main, 0,    0, TOOLBAR_WIDTH, Panel_Main.Height);
+  Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
+  Sidebar_Top       := TKMImage.Create(Panel_Sidebar, 0,    0, 224, 200, 407);
+  Sidebar_Middle    := TKMImage.Create(Panel_Sidebar, 0,  200, 224, 168, 554);
 
-  MinimapView := TKMMinimapView.Create(fMinimap, Panel_Main, 10, 10, 176, 176);
+  MinimapView := TKMMinimapView.Create(fMinimap, Panel_Sidebar, 10, 10, 176, 176);
   MinimapView.OnMinimapChange := Minimap_Update; // Allow dragging with LMB pressed
   MinimapView.OnClickRight := Minimap_RightClick;
   MinimapView.OnMinimapClick := Minimap_Click; // For placing beacons
@@ -992,12 +998,18 @@ procedure TKMGamePlayInterface.Resize(X,Y: Word);
 const
   PANEL_MIN_HEIGHT = 750;
 var
+  I, visH, tbW: Integer;
   showSwords: Boolean;
 begin
+  Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
   inherited;
 
+  visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
+  tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
+  Panel_Sidebar.Height := visH;
+
   // Show swords filler if screen height allows
-  showSwords := (Panel_Main.Height >= PANEL_MIN_HEIGHT);
+  showSwords := (visH >= PANEL_MIN_HEIGHT);
   Sidebar_Middle.Visible := showSwords;
 
   Panel_Stats.Top := (Panel_Main.Height - Panel_Stats.Height) div 2;
@@ -1010,11 +1022,37 @@ begin
 
   // Needs to be -10 when the swords are hidden so it fits 1024x576
   Panel_Controls.Top := Sidebar_Top.Height - 10 + (10+Sidebar_Middle.Height) * Byte(showSwords);
-  Panel_Controls.Height := Panel_Main.Height - Panel_Controls.Top;
+  Panel_Controls.Height := visH - Panel_Controls.Top;
   {$IFDEF ANDROID}
   fControlsBaseTop := Panel_Controls.Top;
   ApplySidebarScroll;
   {$ENDIF}
+
+  Image_Chat.Left := tbW;
+  Label_ChatUnread.Left := tbW;
+  Image_MPAllies.Left := tbW;
+  Image_MessageLog.Left := tbW;
+  for I := 0 to MAX_VISIBLE_MSGS do
+    Image_Message[I].Left := tbW;
+
+  Panel_Message.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_Message.Width));
+  Panel_MessageLog.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_MessageLog.Width));
+  fGuiGameAllies.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 840)));
+  fGuiGameChat.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 600)));
+
+  Image_Clock.Left := tbW + 8;
+  Label_Time.Left := tbW + 41;
+  Label_ClockSpeedActual.Left := tbW + 41;
+  Label_ClockSpeedRecorded.Left := tbW + 41;
+
+  Panel_ReplayBar.Left := Max(320, tbW + 96);
+  Panel_ReplayFOW.Left := Max(320, tbW + 96);
+  Panel_ReplayCtrl.Left := Max(320, tbW + 96);
+
+  Bevel_DebugInfo.Left := tbW + 8 - 10;
+  Label_DebugInfo.Left := tbW + 8;
+
+  UpdateOverlayControls;
 
   if fGuiGameStats.Visible then
     fGuiGameStats.Resize;
@@ -1035,8 +1073,11 @@ const
 
 
 procedure TKMGamePlayInterface.ApplySidebarScroll;
+var
+  visH: Integer;
 begin
-  fSidebarScrollMax := Max(0, SIDEBAR_REQUIRED_HEIGHT - Panel_Main.Height);
+  visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
+  fSidebarScrollMax := Max(0, SIDEBAR_REQUIRED_HEIGHT - visH);
   fSidebarScroll := EnsureRange(fSidebarScroll, 0, fSidebarScrollMax);
 
   Sidebar_Top.Top := -fSidebarScroll;
@@ -1044,14 +1085,14 @@ begin
   MinimapView.Top := 10 - fSidebarScroll;
   Panel_Controls.Top := fControlsBaseTop - fSidebarScroll;
   // Keep full sidebar height, the part below the screen is reached by scrolling
-  Panel_Controls.Height := Max(Panel_Main.Height, SIDEBAR_REQUIRED_HEIGHT) - fControlsBaseTop;
+  Panel_Controls.Height := Max(visH, SIDEBAR_REQUIRED_HEIGHT) - fControlsBaseTop;
 end;
 
 
 procedure TKMGamePlayInterface.ScrollSidebar(aDelta: Integer);
 begin
   if fSidebarScrollMax = 0 then Exit;
-  fSidebarScroll := EnsureRange(fSidebarScroll + aDelta, 0, fSidebarScrollMax);
+  fSidebarScroll := EnsureRange(fSidebarScroll + Round(aDelta / Panel_Sidebar.RenderScale), 0, fSidebarScrollMax);
   ApplySidebarScroll;
 end;
 
@@ -1065,11 +1106,15 @@ end;
 
 
 function TKMGamePlayInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
-
+var
+  lx, ly: Integer;
 begin
+  lx := X;
+  ly := Y;
+  MinimapView.ScreenToLocal(lx, ly);
   Result := (fSidebarScrollMax > 0) and (X < GetToolbarWidth)
-            and not ((X >= MinimapView.AbsLeft) and (X < MinimapView.AbsLeft + MinimapView.Width)
-                     and (Y >= MinimapView.AbsTop) and (Y < MinimapView.AbsTop + MinimapView.Height));
+            and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
+                     and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
 {$ENDIF}
 
@@ -1401,7 +1446,7 @@ var
   I: Integer;
   T: TKMTabButtons;
 begin
-  Panel_Controls := TKMPanel.Create(Panel_Main, 0, 368, 224, 376);
+  Panel_Controls := TKMPanel.Create(Panel_Sidebar, 0, 368, 224, 376);
   // Resized manually on .Resize to be most efficient in space management
 
     // We need several of these to cover max of 1534x2560 (vertically oriented)
@@ -2835,7 +2880,7 @@ var
   overlayTop, overlayLeft: Integer;
 begin
   overlayTop := 12;
-  overlayLeft := 258;
+  overlayLeft := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale) + 34;
 
   if Panel_ReplayFOW.Visible then
     overlayTop := Panel_ReplayFOW.Top + Panel_ReplayFOW.Height - 5;
@@ -2848,6 +2893,7 @@ begin
   Label_OverlayHide.Top := overlayTop;
 
   Label_ScriptedOverlay.Left := overlayLeft + 5;
+  Label_ScriptedOverlay.Width := Max(10, Panel_Main.Width - Label_ScriptedOverlay.Left - 5);
   Button_ScriptedOverlay.Left := overlayLeft;
   Label_OverlayShow.Left := overlayLeft + 3;
   Label_OverlayHide.Left := overlayLeft + 3;
@@ -3342,12 +3388,19 @@ end;
 
 
 function TKMGamePlayInterface.GetToolbarWidth: Integer;
+var
+  scale: Single;
 begin
   // Don't render toolbar when SAVE_MAP_TO_FBO is set
   if SAVE_MAP_TO_FBO_RENDER then Exit(0);
 
-  Result := TOOLBAR_WIDTH + GetSafeInsetLeft;
+  if Panel_Sidebar <> nil then
+    scale := Panel_Sidebar.RenderScale
+  else
+    scale := gGameSettings.SidebarScale;
+  Result := Round(TOOLBAR_WIDTH * scale) + GetSafeInsetLeft;
 end;
+
 
 
 function TKMGamePlayInterface.CanShowChat: Boolean;
