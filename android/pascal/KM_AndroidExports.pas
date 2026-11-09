@@ -6,7 +6,7 @@ unit KM_AndroidExports;
 //  - tap on UI or map = left click
 //  - one finger drag on UI = left button drag (sliders, scrollbars, minimap)
 //  - one finger drag on map = scroll the map (or left button drag while a build/editor tool is active)
-//  - long press on map = right button press; keep holding and move to pick troop direction, release to finish
+//  - double tap (or long press) on map or right-clickable UI = right button press; keep holding and move to pick troop direction, release to finish
 //  - two finger tap = right click
 //  - pinch = zoom, two finger drag = scroll
 interface
@@ -67,7 +67,10 @@ uses
 
 const
   TAP_SLOP = 14;          // px (render resolution) finger can move and still be a tap
+  DOUBLE_TAP_SLOP = 36;   // px (render resolution) max distance between the two taps of a double-tap
+  PINCH_SLOP = 32;        // px (render resolution) two-finger movement before becoming a zoom/pan instead of a tap
   LONG_PRESS_MS = 250;    // hold time to become a right button press
+  DOUBLE_TAP_MS = 250;    // max time from first tap release to second touch down
   TWO_FINGER_TAP_MS = 300;
 
 type
@@ -77,8 +80,12 @@ type
 var
   gCallbacks: TKMHostCallbacks;
   fTouchState: TKMTouchState = tsIdle;
-  fDownPos, fLastPos: TPointF;
+  fDownPos, fLastPos, fSecondDownPos: TPointF;
   fDownTime: QWord;
+  fRightHoldMoved: Boolean;
+  fPendingTap: Boolean;
+  fPendingTapPos: TPointF;
+  fPendingTapTime: QWord;
   fButtons: TShiftState = [];
   // Pinch
   fPinchStartDist, fPinchStartZoom: Single;
@@ -297,6 +304,7 @@ begin
 end;
 
 
+procedure CheckPendingTap; forward;
 procedure CheckLongPress; forward;
 
 var
@@ -421,6 +429,7 @@ begin
   if (gMain = nil) or not gMain.Started then Exit;
   try
     CheckSynchronize;
+    CheckPendingTap;
     CheckLongPress;
     if SelfTestActive then
       SelfTestFrame;
@@ -447,6 +456,7 @@ begin
   if gMain <> nil then
     gMain.SurfaceResized(aWidth, aHeight);
 end;
+
 
 
 procedure kam_pause; cdecl;
@@ -592,6 +602,7 @@ begin
 end;
 
 
+
 // Does the UI control under the point respond to right-click (e.g. Market wares, Storehouse/Barracks flags, +/- 10 buttons, minimap)
 function IsRightClickableUI(const P: TPointF): Boolean;
 var
@@ -664,6 +675,26 @@ begin
 end;
 
 
+procedure FlushPendingTap;
+var
+  pos: TPointF;
+begin
+  if not fPendingTap then Exit;
+  fPendingTap := False;
+  pos := fPendingTapPos;
+  SendMove(pos);
+  SendDown(mbLeft, pos);
+  SendUp(mbLeft, pos);
+end;
+
+
+procedure CheckPendingTap;
+begin
+  if fPendingTap and (GetTickCount64 - fPendingTapTime >= DOUBLE_TAP_MS) then
+    FlushPendingTap;
+end;
+
+
 procedure CheckLongPress;
 begin
   if ((fTouchState in [tsMapPending, tsUIPending])
@@ -671,9 +702,12 @@ begin
   and (GetTickCount64 - fDownTime >= LONG_PRESS_MS) then
   begin
     // Right button press with haptic feedback, held until finger is lifted (allows to pick troops direction or hold-repeat +/- 10)
+    fPendingTap := False;
     HostHaptic;
     SendMove(fDownPos);
     SendDown(mbRight, fDownPos);
+    fSecondDownPos := fDownPos;
+    fRightHoldMoved := False;
     fTouchState := tsRightHold;
   end;
 end;
@@ -683,14 +717,13 @@ procedure StartPinch(const P0, P1: TPointF);
 var
   vp: TKMViewport;
 begin
+  fPendingTap := False;
   vp := GameViewport;
-  if vp = nil then
-  begin
-    fTouchState := tsConsumed;
-    Exit;
-  end;
   fPinchStartDist := Max(Dist(P0, P1), 1);
-  fPinchStartZoom := vp.Zoom;
+  if vp <> nil then
+    fPinchStartZoom := vp.Zoom
+  else
+    fPinchStartZoom := 1;
   fPinchLastMid := MakePointF((P0.X + P1.X) / 2, (P0.Y + P1.Y) / 2);
   fPinchStartTime := GetTickCount64;
   fPinchMoved := False;
@@ -710,12 +743,31 @@ begin
     case aAction of
       TOUCH_DOWN:
         begin
+          if fPendingTap
+             and (GetTickCount64 - fPendingTapTime <= DOUBLE_TAP_MS)
+             and (Dist(P0, fPendingTapPos) <= DOUBLE_TAP_SLOP) then
+          begin
+            // Second tap on map or right-clickable UI: press right mouse button and hold until finger is lifted
+            fPendingTap := False;
+            fDownPos := fPendingTapPos;
+            fSecondDownPos := P0;
+            fLastPos := fDownPos;
+            fDownTime := GetTickCount64;
+            fRightHoldMoved := False;
+            HostHaptic;
+            SendMove(fDownPos);
+            SendDown(mbRight, fDownPos);
+            fTouchState := tsRightHold;
+            Exit;
+          end;
+
+          FlushPendingTap;
           fDownPos := P0;
           fLastPos := P0;
           fDownTime := GetTickCount64;
           SendMove(P0);
           if ScrollableSidebarAt(P0) <> nil then
-            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press)
+            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press / double tap)
             fTouchState := tsSidebarPending
           else
           if IsOverUI(P0) then
@@ -729,23 +781,17 @@ begin
             end;
           end
           else
-          if MapToolActive then
-          begin
-            SendDown(mbLeft, P0);
-            fTouchState := tsMapDragLeft;
-          end
-          else
             fTouchState := tsMapPending;
         end;
 
       TOUCH_POINTER_DOWN:
         if aPointerCount >= 2 then
           case fTouchState of
-            tsMapPending, tsMapPan:
+            tsMapPending, tsMapPan, tsUIPending, tsSidebarPending:
               StartPinch(P0, P1);
-            tsMapDragLeft:
+            tsMapDragLeft, tsUIDrag:
               begin
-                // Second finger cancels the tool drag and lets the map be moved/zoomed
+                // Second finger cancels the left-button drag and starts a two-finger tap or pinch/pan
                 SendUp(mbLeft, fLastPos);
                 StartPinch(P0, P1);
               end;
@@ -785,16 +831,36 @@ begin
               fTouchState := tsUIDrag;
               fLastPos := P0;
             end;
-          tsUIDrag, tsMapDragLeft, tsRightHold:
+          tsUIDrag, tsMapDragLeft:
             begin
               SendMove(P0);
               fLastPos := P0;
             end;
+          tsRightHold:
+            begin
+              if not fRightHoldMoved and (Dist(P0, fSecondDownPos) > TAP_SLOP) then
+                fRightHoldMoved := True;
+              if fRightHoldMoved then
+              begin
+                SendMove(P0);
+                fLastPos := P0;
+              end;
+            end;
           tsMapPending:
             if Dist(P0, fDownPos) > TAP_SLOP then
             begin
-              fTouchState := tsMapPan;
-              PanViewport(P0.X - fLastPos.X, P0.Y - fLastPos.Y);
+              if MapToolActive then
+              begin
+                SendMove(fDownPos);
+                SendDown(mbLeft, fDownPos);
+                SendMove(P0);
+                fTouchState := tsMapDragLeft;
+              end
+              else
+              begin
+                fTouchState := tsMapPan;
+                PanViewport(P0.X - fLastPos.X, P0.Y - fLastPos.Y);
+              end;
               fLastPos := P0;
             end;
           tsMapPan:
@@ -806,9 +872,9 @@ begin
             if aPointerCount >= 2 then
             begin
               mid := MakePointF((P0.X + P1.X) / 2, (P0.Y + P1.Y) / 2);
-              if (Abs(Dist(P0, P1) - fPinchStartDist) > TAP_SLOP) or (Dist(mid, fPinchLastMid) > TAP_SLOP) then
+              if (Abs(Dist(P0, P1) - fPinchStartDist) > PINCH_SLOP) or (Dist(mid, fPinchLastMid) > PINCH_SLOP) then
                 fPinchMoved := True;
-              if fPinchMoved then
+              if fPinchMoved and (GameViewport <> nil) then
               begin
                 ZoomViewport(fPinchStartZoom * Dist(P0, P1) / fPinchStartDist, mid);
                 PanViewport(mid.X - fPinchLastMid.X, mid.Y - fPinchLastMid.Y);
@@ -823,6 +889,7 @@ begin
           // Quick two finger tap without movement = right click
           if not fPinchMoved and (GetTickCount64 - fPinchStartTime < TWO_FINGER_TAP_MS) then
           begin
+            HostHaptic;
             SendMove(fDownPos);
             SendDown(mbRight, fDownPos);
             SendUp(mbRight, fDownPos);
@@ -833,11 +900,24 @@ begin
       TOUCH_UP:
         begin
           case fTouchState of
-            tsSidebarPending, tsUIPending:
+            tsSidebarPending:
+              if IsRightClickableUI(fDownPos) then
               begin
-                // Tap on the sidebar or right-clickable UI control = left click
+                fPendingTap := True;
+                fPendingTapPos := fDownPos;
+                fPendingTapTime := GetTickCount64;
+              end
+              else
+              begin
                 SendDown(mbLeft, fDownPos);
                 SendUp(mbLeft, fDownPos);
+              end;
+            tsUIPending, tsMapPending:
+              begin
+                // Defer left click briefly so a double-tap becomes a right click instead
+                fPendingTap := True;
+                fPendingTapPos := fDownPos;
+                fPendingTapTime := GetTickCount64;
               end;
 
             tsUIDrag, tsMapDragLeft:
@@ -848,16 +928,15 @@ begin
                 if (ActiveControls <> nil) and (ActiveControls.HitControl(Round(P0.X), Round(P0.Y)) is TKMSelectableEdit) then
                   fTextFieldTapped := True;
               end;
-            tsMapPending:
-              begin
-                // Tap on the map = left click
-                SendDown(mbLeft, fDownPos);
-                SendUp(mbLeft, fDownPos);
-              end;
             tsRightHold:
               begin
-                SendMove(P0);
-                SendUp(mbRight, P0);
+                if fRightHoldMoved then
+                begin
+                  SendMove(P0);
+                  SendUp(mbRight, P0);
+                end
+                else
+                  SendUp(mbRight, fDownPos);
               end;
           end;
           fTouchState := tsIdle;
@@ -865,6 +944,7 @@ begin
 
       TOUCH_CANCEL:
         begin
+          fPendingTap := False;
           ReleaseButtons(fLastPos);
           fTouchState := tsIdle;
         end;
@@ -955,9 +1035,11 @@ end;
 
 procedure kam_back; cdecl;
 begin
+  FlushPendingTap;
   kam_key(KEY_DOWN, VK_ESCAPE, 0);
   kam_key(KEY_UP, VK_ESCAPE, 0);
 end;
+
 
 
 function kam_text_input_active: Integer; cdecl;
