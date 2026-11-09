@@ -1065,14 +1065,17 @@ end;
 
 // Get list of hands that can hear the script sounds
 function TKMGame.GetListenersHandIDs: TKMByteSet;
+var
+  I: Integer;
+  roomSlot: TKMNetRoomSlot;
 begin
   Result := [];
 
   if fParams.IsMultiPlayerOrSpec then
   begin
-    for var I := 1 to gNetworking.Room.Count do
+    for I := 1 to gNetworking.Room.Count do
     begin
-      var roomSlot := gNetworking.Room[I];
+      roomSlot := gNetworking.Room[I];
       if not roomSlot.IsHuman
       or roomSlot.IsSpectator
       or not roomSlot.Connected
@@ -1084,10 +1087,11 @@ begin
     end;
   end
   else
-    for var I := 0 to gHands.Count - 1 do
+    for I := 0 to gHands.Count - 1 do
       if gHands[I].Enabled then
         Include(Result, I);
 end;
+
 
 
 procedure TKMGame.GameMPDisconnect(const aReason: UnicodeString);

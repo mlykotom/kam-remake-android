@@ -176,8 +176,11 @@ end;
 
 
 function TKMScriptSoundsManager.CanPlay(aIndex: Integer): Boolean;
+var
+  scriptSound: TKMScriptSound;
+  distanceSqr: Single;
 begin
-  var scriptSound := fScriptSounds[aIndex];
+  scriptSound := fScriptSounds[aIndex];
 
   Result := ((scriptSound.HandIndex = gMySpectator.HandID) or (scriptSound.HandIndex = HAND_NONE))
              and (not scriptSound.Attenuate
@@ -187,7 +190,7 @@ begin
 
   if scriptSound.Attenuate then
   begin
-    var distanceSqr := KMDistanceSqr(KMPointF(scriptSound.Loc), fListener);
+    distanceSqr := KMDistanceSqr(KMPointF(scriptSound.Loc), fListener);
     Result := Result and (distanceSqr < Sqr(scriptSound.Radius));
   end;
 end;
@@ -195,9 +198,10 @@ end;
 
 function TKMScriptSoundsManager.StartSound(aIndex: Integer): Integer;
 var
+  scriptSound: TKMScriptSound;
   soundFile: UnicodeString;
 begin
-  var scriptSound := fScriptSounds[aIndex];
+  scriptSound := fScriptSounds[aIndex];
 
   Result := -1;
   soundFile := gGame.GetScriptSoundFilePath(scriptSound.SoundName, scriptSound.AudioFormat);
@@ -227,12 +231,15 @@ function TKMScriptSoundsManager.AddSound(aHandIndex: TKMHandID; const aSoundName
                                          aLoc: TKMPoint; aAttenuate: Boolean; aVolume: Single; aRadius: Single; aFadeMusic, aLooped: Boolean): Integer;
 const
   ERROR_EXIT_CODE = -1;
+var
+  newSound: TKMScriptSound;
 begin
   if Self = nil then Exit(ERROR_EXIT_CODE);
 
   Inc(fLastScriptUID); // fLastScriptUID always increases
 
-  var newSound := TKMScriptSound.Create;
+  newSound := TKMScriptSound.Create;
+
   newSound.ScriptUID := fLastScriptUID;
   newSound.PlayingIndex := -1;
   newSound.Looped := aLooped;
