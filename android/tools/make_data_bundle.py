@@ -18,6 +18,10 @@ for folder in FOLDERS:
     for root, dirs, files in os.walk(os.path.join(src, folder)):
         dirs.sort()
         for name in sorted(files):
+            # Android's asset packager excludes Finder metadata, so it must not
+            # appear in the manifest consumed by DataInstaller.
+            if name == '.DS_Store':
+                continue
             full = os.path.join(root, name)
             rel = os.path.relpath(full, src)
             size = os.path.getsize(full)
