@@ -140,6 +140,10 @@ end;
 
 { TKMMain }
 constructor TKMMain.Create;
+{$IFDEF DBG_PERFLOG}
+var
+  perfLogWasCollapsed: Boolean;
+{$ENDIF}
 begin
   inherited;
 
@@ -161,7 +165,8 @@ begin
   gPerfLogs.ShowForm(fFormMain.cpPerfLogs);
   gPerfLogs.OnFormChanged := fFormMain.OtherFormChanged;
 
-  var perfLogWasCollapsed := fFormMain.cpPerfLogs.Collapsed;
+  perfLogWasCollapsed := fFormMain.cpPerfLogs.Collapsed;
+
   fFormMain.DevSettings.SkipSave := True; // Skip save
   fFormMain.cpPerfLogs.Collapsed := False; //We can set TCategoryPanel height only when Collapsed set to False
   fFormMain.cpPerfLogs.Height := gPerfLogs.FormHeight;
