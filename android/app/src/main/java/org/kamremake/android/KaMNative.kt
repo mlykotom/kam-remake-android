@@ -69,4 +69,9 @@ internal object KaMNative {
     fun onStopVideo() {
         activity?.stopVideo()
     }
+
+    @JvmStatic
+    fun onHaptic() {
+        activity?.performHaptic()
+    }
 }

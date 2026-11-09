@@ -20,6 +20,7 @@ type
     Quit: procedure; cdecl;
     PlayVideo: procedure(aPath: PAnsiChar; aVolume, aStretch: Integer); cdecl;
     StopVideo: procedure; cdecl;
+    Haptic: procedure; cdecl;
   end;
   PKMHostCallbacks = ^TKMHostCallbacks;
 
@@ -66,11 +67,11 @@ uses
 
 const
   TAP_SLOP = 14;          // px (render resolution) finger can move and still be a tap
-  LONG_PRESS_MS = 450;    // hold time to become a right button press
+  LONG_PRESS_MS = 250;    // hold time to become a right button press
   TWO_FINGER_TAP_MS = 300;
 
 type
-  TKMTouchState = (tsIdle, tsUIDrag, tsMapPending, tsMapPan, tsMapDragLeft, tsRightHold, tsPinch, tsConsumed,
+  TKMTouchState = (tsIdle, tsUIPending, tsUIDrag, tsMapPending, tsMapPan, tsMapDragLeft, tsRightHold, tsPinch, tsConsumed,
                    tsSidebarPending, tsSidebarScroll);
 
 var
@@ -138,6 +139,12 @@ begin
     gCallbacks.StopVideo();
 end;
 
+procedure HostHaptic;
+begin
+  if Assigned(gCallbacks.Haptic) then
+    gCallbacks.Haptic();
+end;
+
 procedure HostQuit;
 begin
   if Assigned(gCallbacks.Quit) then
@@ -155,6 +162,7 @@ begin
   gHostQuit := HostQuit;
   gHostPlayVideo := HostPlayVideo;
   gHostStopVideo := HostStopVideo;
+  gHostHaptic := HostHaptic;
 end;
 
 
@@ -584,6 +592,23 @@ begin
 end;
 
 
+// Does the UI control under the point respond to right-click (e.g. Market wares, Storehouse/Barracks flags, +/- 10 buttons, minimap)
+function IsRightClickableUI(const P: TPointF): Boolean;
+var
+  ctrls: TKMMasterControl;
+  pt: TPoint;
+  ctrl: TKMControl;
+begin
+  Result := False;
+  ctrls := ActiveControls;
+  if ctrls = nil then Exit;
+  pt := MousePt(P);
+  ctrl := ctrls.HitControl(pt.X, pt.Y);
+  if ctrl <> nil then
+    Result := Assigned(ctrl.OnClickShift) or Assigned(ctrl.OnClickRight);
+end;
+
+
 // Some cursor modes (roads, fields, map editor brushes) are applied by dragging with the left button
 function MapToolActive: Boolean;
 begin
@@ -641,9 +666,12 @@ end;
 
 procedure CheckLongPress;
 begin
-  if (fTouchState = tsMapPending) and (GetTickCount64 - fDownTime >= LONG_PRESS_MS) then
+  if ((fTouchState in [tsMapPending, tsUIPending])
+      or ((fTouchState = tsSidebarPending) and IsRightClickableUI(fDownPos)))
+  and (GetTickCount64 - fDownTime >= LONG_PRESS_MS) then
   begin
-    // Right button press, held until finger is lifted (allows to pick troops direction)
+    // Right button press with haptic feedback, held until finger is lifted (allows to pick troops direction or hold-repeat +/- 10)
+    HostHaptic;
     SendMove(fDownPos);
     SendDown(mbRight, fDownPos);
     fTouchState := tsRightHold;
@@ -687,13 +715,18 @@ begin
           fDownTime := GetTickCount64;
           SendMove(P0);
           if ScrollableSidebarAt(P0) <> nil then
-            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag
+            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press)
             fTouchState := tsSidebarPending
           else
           if IsOverUI(P0) then
           begin
-            SendDown(mbLeft, P0);
-            fTouchState := tsUIDrag;
+            if IsRightClickableUI(P0) then
+              fTouchState := tsUIPending
+            else
+            begin
+              SendDown(mbLeft, P0);
+              fTouchState := tsUIDrag;
+            end;
           end
           else
           if MapToolActive then
@@ -744,6 +777,14 @@ begin
                 ScrollSidebarOf(fScrollTarget, Round(fLastPos.Y - P0.Y));
               fLastPos := P0;
             end;
+          tsUIPending:
+            if Dist(P0, fDownPos) > TAP_SLOP then
+            begin
+              SendDown(mbLeft, fDownPos);
+              SendMove(P0);
+              fTouchState := tsUIDrag;
+              fLastPos := P0;
+            end;
           tsUIDrag, tsMapDragLeft, tsRightHold:
             begin
               SendMove(P0);
@@ -792,12 +833,13 @@ begin
       TOUCH_UP:
         begin
           case fTouchState of
-            tsSidebarPending:
+            tsSidebarPending, tsUIPending:
               begin
-                // Tap on the sidebar = left click
+                // Tap on the sidebar or right-clickable UI control = left click
                 SendDown(mbLeft, fDownPos);
                 SendUp(mbLeft, fDownPos);
               end;
+
             tsUIDrag, tsMapDragLeft:
               begin
                 SendMove(P0);

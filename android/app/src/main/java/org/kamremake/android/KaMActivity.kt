@@ -8,8 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -256,6 +260,29 @@ class KaMActivity : Activity() {
     internal fun stopVideo() {
         runOnUiThread {
             video?.takeIf { it.isPlaying() }?.finish()
+        }
+    }
+
+    internal fun performHaptic() {
+        runOnUiThread {
+            try {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+                    } else {
+                        VibrationEffect.createOneShot(25L, VibrationEffect.DEFAULT_AMPLITUDE)
+                    }
+                    vibrator.vibrate(effect)
+                    return@runOnUiThread
+                }
+            } catch (_: Exception) {
+            }
+            view?.performHapticFeedback(
+                HapticFeedbackConstants.LONG_PRESS,
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+            )
         }
     }
 
