@@ -6,6 +6,7 @@ uses
   Classes, Types;
 
 type
+  TAlign = (alNone, alTop, alBottom, alLeft, alRight, alClient, alCustom);
   TMouseButton = (mbLeft, mbRight, mbMiddle, mbExtra1, mbExtra2);
   TCursor = -32768..32767;
   TCaption = string;
@@ -18,10 +19,14 @@ type
 
   TModalResult = Integer;
 
+  TWinControl = class;
+
   TControl = class(TComponent)
   private
     fLeft, fTop, fWidth, fHeight: Integer;
     fVisible: Boolean;
+    fParent: TWinControl;
+    fAlign: TAlign;
   public
     function ClientRect: TRect;
     function ClientToScreen(const aPoint: TPoint): TPoint;
@@ -32,7 +37,10 @@ type
     property Width: Integer read fWidth write fWidth;
     property Height: Integer read fHeight write fHeight;
     property Visible: Boolean read fVisible write fVisible;
+    property Parent: TWinControl read fParent write fParent;
+    property Align: TAlign read fAlign write fAlign;
   end;
+
 
   TWinControl = class(TControl)
   public

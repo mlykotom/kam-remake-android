@@ -6,7 +6,7 @@ uses
   {$IFDEF FPC}Forms,{$ENDIF}   //Lazarus do not know UITypes
   {$IFDEF WDC}UITypes,{$ENDIF} //We use settings in console modules
   KM_WareDistribution, KM_MapTypes,
-  KM_Defaults, KM_CommonTypes,
+  KM_Defaults, KM_CommonTypes, KM_Platform,
   KM_Lists,
   KM_CommonClasses,
 
@@ -310,7 +310,7 @@ constructor TKMGameSettings.Create;
 begin
   inherited;
 
-  fSidebarScale := {$IFDEF ANDROID}1.25{$ELSE}1.0{$ENDIF};
+  fSidebarScale := DEFAULT_SIDEBAR_SCALE;
   fWareDistribution := TKMWareDistribution.Create;
 
   fFavouriteMaps := TKMMapsCRCList.Create;
@@ -434,7 +434,8 @@ begin
     nUI := nGameCommon.AddOrFindChild('UI');
       fDefaultZoom    := nUI.Attributes['DefaultZoom'].AsFloat(1);
       fZoomBehaviour  := TKMZoomBehaviour(nUI.Attributes['ZoomBehaviour'].AsInteger(Ord(zbFull))); // Default zoom value is zbFull
-      SidebarScale    := nUI.Attributes['SidebarScale'].AsFloat({$IFDEF ANDROID}1.25{$ELSE}1.0{$ENDIF});
+      SidebarScale    := nUI.Attributes['SidebarScale'].AsFloat(DEFAULT_SIDEBAR_SCALE);
+
 
     // Speed
     nGameSpeed := nGameCommon.AddOrFindChild('Speed');

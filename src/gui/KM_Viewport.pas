@@ -263,7 +263,8 @@ end;
 function TKMViewport.GetClip: TKMRect;
 begin
   Result.Left   := Math.Max(Round(fPosition.X
-                         - (fViewportClip.X/2 - fViewRect.Left + ToolbarWidth) / ZoomedCellSizePX), 1);
+                         - (fViewportClip.X/2 + ToolbarWidth) / ZoomedCellSizePX) - 1, 1);
+
   Result.Right  := Math.Min(Round(fPosition.X
                          + (fViewportClip.X/2 + fViewRect.Left - ToolbarWidth) / ZoomedCellSizePX) + 1, fMapX - 1);
   //Small render problem could be encountered at the top of clip rect

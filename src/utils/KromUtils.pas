@@ -5,8 +5,7 @@ uses
   Classes
   {$IFDEF MSWindows}, Windows, MMSystem {$ENDIF}
   {$IFDEF Unix}, LCLType {$ENDIF}
-  {$IFDEF FPC}, LCLIntf {$IFNDEF ANDROID}, UTF8Process, LazHelpHTML {$ENDIF} {$ENDIF}
-
+  {$IFDEF FPC}, LCLIntf, UTF8Process, LazHelpHTML {$ENDIF}
   ;
 
 type

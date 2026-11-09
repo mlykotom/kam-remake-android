@@ -95,6 +95,7 @@ type
 const
   // Toolbar pads
   TB_PAD = 9; // Picked up empirically
+  SIDEBAR_STONE_BORDER_W = 25; // Width of carved stone border strip on right side of TexID 404 (px 199..224)
   TB_WIDTH = 180; // Max width of sidebar elements
   TB_MAP_ED_WIDTH = MAPED_TOOLBAR_WIDTH - 44; //Max width of sidebar elements in Map Editor
   PAGE_TITLE_Y = 5; // Page title offset
@@ -205,7 +206,7 @@ const
 
 implementation
 uses
-  {$IFDEF ANDROID_PORT} KMAndroidHost, {$ENDIF}
+  KM_Platform,
   StrUtils, KromUtils,
   KM_AIDefensePos,
   KM_Cursor, KM_Main, KM_System,
@@ -269,22 +270,18 @@ end;
 
 function TKMUserInterfaceGame.GetSafeInsetLeft: Integer;
 begin
-  {$IFDEF ANDROID_PORT}
-  Result := gHostSafeInsetLeft;
-  {$ELSE}
-  Result := 0;
-  {$ENDIF}
+  if PlatformSafeInsetLeft > 0 then
+    Result := PlatformSafeInsetLeft + Round(SIDEBAR_STONE_BORDER_W * gGameSettings.SidebarScale)
+  else
+    Result := 0;
 end;
 
 
 function TKMUserInterfaceGame.GetSafeInsetRight: Integer;
 begin
-  {$IFDEF ANDROID_PORT}
-  Result := gHostSafeInsetRight;
-  {$ELSE}
-  Result := 0;
-  {$ENDIF}
+  Result := PlatformSafeInsetRight;
 end;
+
 
 
 function TKMUserInterfaceGame.GetHintFont: TKMFont;
@@ -654,7 +651,8 @@ end;
 
 procedure TKMUserInterfaceGame.Paint;
 var
-  I: Integer;
+  I, visH: Integer;
+  scale: Single;
 begin
   if (mlDefencesAll in gGameParams.VisibleLayers) then
     fPaintDefences := True;
@@ -665,11 +663,25 @@ begin
   fPaintDefences := False;
 
   if (GetSafeInsetLeft > 0) and (GetToolbarWidth > 0) then
-    for I := 0 to (Panel_Main.Height div 400) do
-      TKMRenderUI.WritePicture(0, I * 400, 224, 400, [anLeft, anTop], rxGui, 404, True);
+  begin
+    scale := gGameSettings.SidebarScale;
+    visH := Round(Panel_Main.Height / scale);
+    if scale <> 1 then
+      TKMRenderUI.PushScale(GetSafeInsetLeft, 0, scale);
+    try
+      for I := 0 to (visH div 400) do
+        TKMRenderUI.WriteSubPicture(GetSafeInsetLeft - SIDEBAR_STONE_BORDER_W, I * 400,
+                                    SIDEBAR_STONE_BORDER_W, 400, rxGui, 404,
+                                    224 - SIDEBAR_STONE_BORDER_W, 224, True);
+    finally
+      if scale <> 1 then
+        TKMRenderUI.PopScale;
+    end;
+  end;
 
   inherited;
 end;
+
 
 
 

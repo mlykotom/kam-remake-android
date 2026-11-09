@@ -56,6 +56,8 @@ type
     class procedure WriteReplayBar (aLeft, aTop, aWidth, aHeight: SmallInt; aPos, aPeacetime, aMaxValue: Integer; aMarks: TList<Integer>; aPattern: Word; aHighlightedMark: Integer = -1);
     class procedure WritePicture   (aLeft, aTop, aWidth, aHeight: SmallInt; aAnchors: TKMAnchorsSet; aRX: TRXType; aID: Word;
       aEnabled: Boolean = True; aColor: TColor4 = $FFFF00FF; aLightness: Single = 0);
+    class procedure WriteSubPicture(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
+      aSrcX1, aSrcX2: Word; aFlipX: Boolean = False);
     class procedure WritePlot      (aLeft, aTop, aWidth, aHeight: SmallInt; aValues: TKMCardinalArray; aMaxValue: Cardinal;
       aColor: TColor4; aLineWidth: Byte);
     class procedure WriteOutline   (aLeft, aTop, aWidth, aHeight, aLineWidth: SmallInt; Col: TColor4);
@@ -607,7 +609,44 @@ begin
 end;
 
 
+class procedure TKMRenderUI.WriteSubPicture(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
+                                            aSrcX1, aSrcX2: Word; aFlipX: Boolean = False);
+var
+  uLeft, uRight, tmp: Single;
+begin
+  if (aID = 0) or (aID > High(gGFXData[aRX])) then Exit;
+  with gGFXData[aRX, aID] do
+  begin
+    if PxWidth = 0 then Exit;
+    uLeft  := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX1 / PxWidth);
+    uRight := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX2 / PxWidth);
+    if aFlipX then
+    begin
+      tmp := uLeft;
+      uLeft := uRight;
+      uRight := tmp;
+    end;
+
+    glPushMatrix;
+    try
+      glTranslatef(aLeft, aTop, 0);
+      TKMRender.BindTexture(Tex.TexID);
+      glColor3f(1, 1, 1);
+      glBegin(GL_QUADS);
+        glTexCoord2f(uLeft,  Tex.v1); glVertex2f(0,      0      );
+        glTexCoord2f(uRight, Tex.v1); glVertex2f(aWidth, 0      );
+        glTexCoord2f(uRight, Tex.v2); glVertex2f(aWidth, aHeight);
+        glTexCoord2f(uLeft,  Tex.v2); glVertex2f(0,      aHeight);
+      glEnd;
+    finally
+      glPopMatrix;
+    end;
+  end;
+end;
+
+
 class procedure TKMRenderUI.WritePlot(aLeft,aTop,aWidth,aHeight: SmallInt; aValues: TKMCardinalArray; aMaxValue: Cardinal; aColor: TColor4; aLineWidth: Byte);
+
 var
   I: Integer;
 begin

@@ -7,7 +7,7 @@ uses
   KromOGLUtils,
   KM_MainSettings,
   KM_Pics, KM_Resolutions, KM_ResKeyFuncs, KM_GUICommonKeys,
-  KM_InterfaceDefaults, KM_InterfaceTypes, KM_CommonTypes;
+  KM_InterfaceDefaults, KM_InterfaceTypes, KM_CommonTypes, KM_Platform;
 
 
 type
@@ -357,9 +357,9 @@ begin
 
   Panel_Video.Visible := gVideoPlayer.PlayerEnabled;
 
-  {$IF NOT DEFINED(VIDEOS) AND NOT DEFINED(ANDROID)} // Android plays videos through the host player
-  Panel_Video.Hide; //Hide panel when no videos defined
-  {$IFEND}
+  if not DEFAULT_SHOW_VIDEO_OPTIONS then
+    Panel_Video.Hide; //Hide panel when no videos defined
+
 
 end;
 
