@@ -59,9 +59,10 @@ procedure kam_selftest(aMode: PAnsiChar); cdecl;
 implementation
 uses
   Classes, SysUtils, Math, Types, Controls, LCLType, BaseUnix,
-  KM_Main, KM_GameApp, KM_Defaults, KM_Points, KM_Cursor,
+  KM_Main, KM_GameApp, KM_Defaults, KM_Points, KM_Cursor, KM_System, KM_HandSpectator, KM_HandsCollection,
+
   KM_InterfaceDefaults, KM_InterfaceGame, KM_InterfaceGamePlay, KM_InterfaceMapEditor, KM_Game, KM_Viewport,
-  KM_Controls, KM_ControlsEdit,
+  KM_Controls, KM_ControlsBase, KM_ControlsEdit,
   KM_Log, dglOpenGL, KM_ResSprites, KM_ResTypes, KM_Video, KM_Render,
   KM_AndroidSelfTest,
   KMAndroidHost, KMAndroidLog;
@@ -633,6 +634,28 @@ begin
 end;
 
 
+// Is there an interactive UI control (button, list, checkbox, slider, etc.) under the point
+function IsActionableUI(const P: TPointF): Boolean;
+var
+  ctrls: TKMMasterControl;
+  pt: TPoint;
+  ctrl: TKMControl;
+begin
+  Result := False;
+  ctrls := ActiveControls;
+  if ctrls = nil then Exit;
+  pt := MousePt(P);
+  ctrl := ctrls.HitControl(pt.X, pt.Y);
+  if (ctrl = nil) or not ctrl.Enabled then Exit;
+  if Assigned(ctrl.OnClick) or Assigned(ctrl.OnClickShift) or Assigned(ctrl.OnClickRight) or Assigned(ctrl.OnDoubleClick) then
+    Exit(True);
+  if ctrl is TKMButtonFlatCommon then
+    Exit(TKMButtonFlatCommon(ctrl).Clickable);
+  Result := not ((ctrl is TKMPanel) or (ctrl is TKMBevel) or (ctrl is TKMShape)
+                 or (ctrl is TKMLabel) or (ctrl is TKMImage) or (ctrl is TKMImageStack));
+end;
+
+
 // Some cursor modes (roads, fields, map editor brushes) are applied by dragging with the left button
 function MapToolActive: Boolean;
 begin
@@ -688,6 +711,29 @@ begin
 end;
 
 
+procedure PerformLeftTap(const P: TPointF);
+var
+  isAction: Boolean;
+  prevSelected: TObject;
+begin
+  SendMove(P);
+  if IsOverUI(P) then
+    isAction := IsActionableUI(P)
+  else
+    isAction := MapToolActive
+                or ((gSystem <> nil) and (gSystem.Cursor in [kmcInfo, kmcBeacon, kmcJoinYes, kmcPaintBucket]));
+  prevSelected := nil;
+  if gMySpectator <> nil then
+    prevSelected := gMySpectator.Selected;
+  SendDown(mbLeft, P);
+  SendUp(mbLeft, P);
+  if not isAction and (gMySpectator <> nil) and (gMySpectator.Selected <> prevSelected) then
+    isAction := True;
+  if isAction then
+    HostHaptic;
+end;
+
+
 procedure FlushPendingTap;
 var
   pos: TPointF;
@@ -695,9 +741,7 @@ begin
   if not fPendingTap then Exit;
   fPendingTap := False;
   pos := fPendingTapPos;
-  SendMove(pos);
-  SendDown(mbLeft, pos);
-  SendUp(mbLeft, pos);
+  PerformLeftTap(pos);
 end;
 
 
@@ -789,6 +833,8 @@ begin
               fTouchState := tsUIPending
             else
             begin
+              if IsActionableUI(P0) then
+                HostHaptic;
               SendDown(mbLeft, P0);
               fTouchState := tsUIDrag;
             end;
@@ -824,6 +870,8 @@ begin
               else
               begin
                 // Horizontal drag (e.g. a slider): press where the finger went down and drag
+                if IsActionableUI(fDownPos) then
+                  HostHaptic;
                 SendDown(mbLeft, fDownPos);
                 SendMove(P0);
                 fTouchState := tsUIDrag;
@@ -839,6 +887,8 @@ begin
           tsUIPending:
             if Dist(P0, fDownPos) > TAP_SLOP then
             begin
+              if IsActionableUI(fDownPos) then
+                HostHaptic;
               SendDown(mbLeft, fDownPos);
               SendMove(P0);
               fTouchState := tsUIDrag;
@@ -864,6 +914,7 @@ begin
             begin
               if MapToolActive then
               begin
+                HostHaptic;
                 SendMove(fDownPos);
                 SendDown(mbLeft, fDownPos);
                 SendMove(P0);
@@ -921,10 +972,8 @@ begin
                 fPendingTapTime := GetTickCount64;
               end
               else
-              begin
-                SendDown(mbLeft, fDownPos);
-                SendUp(mbLeft, fDownPos);
-              end;
+                PerformLeftTap(fDownPos);
+
             tsUIPending, tsMapPending:
               begin
                 // Defer left click briefly so a double-tap becomes a right click instead

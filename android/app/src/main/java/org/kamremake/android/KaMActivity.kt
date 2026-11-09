@@ -279,9 +279,9 @@ class KaMActivity : Activity() {
                 val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 if (vibrator != null && vibrator.hasVibrator()) {
                     val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK)
+                        VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
                     } else {
-                        VibrationEffect.createOneShot(25L, VibrationEffect.DEFAULT_AMPLITUDE)
+                        VibrationEffect.createOneShot(12L, VibrationEffect.DEFAULT_AMPLITUDE)
                     }
                     vibrator.vibrate(effect)
                     return@runOnUiThread
@@ -289,7 +289,7 @@ class KaMActivity : Activity() {
             } catch (_: Exception) {
             }
             view?.performHapticFeedback(
-                HapticFeedbackConstants.LONG_PRESS,
+                HapticFeedbackConstants.KEYBOARD_TAP,
                 HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
             )
         }
