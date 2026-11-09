@@ -28,10 +28,20 @@ When working on Android tasks, always prefer the **`android` CLI** (`/Users/mlyk
 See [`android/README.md`](android/README.md) for full architecture and build details:
 
 - **Build APK**: `cd android && ./build_apk.sh` (`KAM_BUILD_TYPE=Release KAM_BUNDLE_DATA=1 ./build_apk.sh` for release with bundled game data)
-- **Push Game Data**: `cd android && ANDROID_SERIAL=<device> ./push_data.sh`
-- **Run & Collect Symbolized Logs**: `cd android && ANDROID_SERIAL=<device> ./run_test.sh`
+- **Fast Native / APK Iteration**:
+  - `build_apk.sh` always wipes `build/units_main` and rebuilds `libkamcore.so` from scratch (~75s) due to an FPC 3.2.2 incremental generics bug.
+  - To compile only `libkamcore.so`: `./android/build_native.sh`
+  - If `libkamcore.so` and JNI libs are already in `android/app/src/main/jniLibs/arm64-v8a/`, package the debug APK in ~10s via `cd android && ./gradlew assembleDebug` and test with `NOBUILD=1 ANDROID_SERIAL=<device> ./run_test.sh`.
+- **Game Data (`KAM_DATA`) & Android 14/15 Scoped Storage**:
+  - Local extracted game assets live at `/Users/mlyko/work/kam_remake_assets/app`. Pass `KAM_DATA=/Users/mlyko/work/kam_remake_assets/app` to `push_data.sh` or `build_apk.sh`.
+  - Push Game Data: `cd android && KAM_DATA=/Users/mlyko/work/kam_remake_assets/app ANDROID_SERIAL=<device> ./push_data.sh`
+  - On Android 14/15 (`targetSdkVersion 35`), `adb push` creates subdirectories in `/sdcard/Android/data/org.kamremake.android/files` owned by `shell:ext_data_rw` (`0770`), which the app UID (`u0_a*`) cannot traverse (causing *"Game data not found"*). On an emulator, fix ownership after pushing: `adb -s <device> root && adb -s <device> shell "chown -R \$(stat -c %U /data/media/0/Android/data/org.kamremake.android/files):ext_data_rw /data/media/0/Android/data/org.kamremake.android/files" && adb -s <device> unroot`.
+- **Run & Collect Symbolized Logs**: `cd android && ANDROID_SERIAL=<device> ./run_test.sh` (engine logs are also written on-device to `/sdcard/Android/data/org.kamremake.android/files/Logs/`)
 - **End-to-End Smoke Test**: `cd android && ANDROID_SERIAL=<device> ./selftest.sh [campaigns|campaigns-all|maps|all]`
-- **FPC 3.2.2 Compatibility**: The Android engine (`android/pascal/kamcore.lpr` -> `libkamcore.so`) compiles with Free Pascal 3.2.2 (`aarch64-android`). Ensure any shared Pascal changes in `src/` compile under FPC 3.2.2 (avoid Delphi-only inline `var` declarations in code compiled by FPC).
+- **FPC 3.2.2 Compatibility & Upstream Rebases**:
+  - The Android engine (`android/pascal/kamcore.lpr` -> `libkamcore.so`) compiles with Free Pascal 3.2.2 (`aarch64-android`, `-MDelphi`).
+  - Ensure shared Pascal code in `src/` avoids Delphi-only inline `var` declarations (`var x := ...`, `for var I := ...`) and `System.*` unit scope prefixes (use `SysUtils`, not `System.SysUtils`). When rebasing onto `upstream/master` (`https://github.com/reyandme/kam_remake.git`), scan upstream diffs for inline `var` and `System.` imports.
+  - Upstream `.pas` files use Windows CRLF (`\r\n`) line endings and `latin1` encoding. If standard edit tools fail on CRLF, use `python3 android/tools/rep.py <file>` to perform exact replacements while preserving CRLF.
 
 ## 3. Upstream KaM Remake Rules (`.ai/rules/`)
 
@@ -45,3 +55,7 @@ Follow the upstream project rules in `.ai/rules/` when modifying engine/gameplay
 - [`.ai/rules/project-layout.md`](.ai/rules/project-layout.md) — Repository layout (`src/`, `android/`, `Utils/`)
 - [`.ai/rules/project.md`](.ai/rules/project.md) — Project overview and architecture
 - [`.ai/rules/tools-and-utils.md`](.ai/rules/tools-and-utils.md) — Tools and utilities reference
+
+## 4. Git Workflow
+
+- **Always Commit When Done**: When a task or conversation is complete, always commit your changes to git (while leaving `src/ext/pascalscript_submodule`'s local toolchain patch uncommitted).
