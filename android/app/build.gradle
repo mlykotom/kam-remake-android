@@ -1,4 +1,7 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
 
 android {
     namespace 'org.kamremake.android'
@@ -16,6 +19,14 @@ android {
     }
 
     externalNativeBuild { cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' } }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
 
     buildTypes {
         debug { debuggable true }
@@ -51,4 +62,5 @@ dependencies {
     // Same video engine as the Windows version of KaM Remake (VLC), plays the original AVI intros
     implementation 'org.videolan.android:libvlc-all:3.7.7'
     implementation 'androidx.core:core:1.13.1'
+    testImplementation 'junit:junit:4.13.2'
 }
