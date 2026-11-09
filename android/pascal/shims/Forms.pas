@@ -14,10 +14,12 @@ type
   TForm = class(TWinControl)
   public
     Caption: string;
+    BorderStyle: TBorderStyle;
     procedure Show;
     procedure Hide;
     procedure Close;
   end;
+
 
   TMonitor = class
   public

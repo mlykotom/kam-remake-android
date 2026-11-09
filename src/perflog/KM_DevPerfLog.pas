@@ -67,7 +67,7 @@ var
 
 implementation
 uses
-  {$IFNDEF ANDROID} KM_DevPerfLogForm, {$ENDIF}
+  KM_DevPerfLogForm,
   TypInfo, KM_Defaults, KM_RenderUI, KM_RenderAux, KM_ResFonts;
 
 
@@ -202,9 +202,7 @@ end;
 
 procedure TKMPerfLogs.SetOnFormChanged(const aValue: TKMEvent);
 begin
-  {$IFNDEF ANDROID}
   TFormPerfLogs(fPerfLogForm).OnFormChanged := aValue;
-  {$ENDIF}
 end;
 
 
@@ -350,11 +348,7 @@ end;
 
 function TKMPerfLogs.FormHeight: Integer;
 begin
-  {$IFNDEF ANDROID}
   Result := TFormPerfLogs(fPerfLogForm).FormHeight;
-  {$ELSE}
-  Result := 0;
-  {$ENDIF}
 end;
 
 
@@ -362,7 +356,6 @@ procedure TKMPerfLogs.ShowForm(aContainer: TWinControl);
 begin
   if Self = nil then Exit;
 
-  {$IFNDEF ANDROID}
   fPerfLogForm := TFormPerfLogs.Create(aContainer);
 
   fPerfLogForm.Parent := aContainer;
@@ -374,8 +367,8 @@ begin
   end;
 
   TFormPerfLogs(fPerfLogForm).Show(Self);
-  {$ENDIF}
 end;
+
 
 
 procedure TKMPerfLogs.TickBegin(aTick: Integer);

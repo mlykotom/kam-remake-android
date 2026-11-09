@@ -110,15 +110,13 @@ type
     procedure MapSaveEnded;
 
     procedure ManageExtrasKeys(Key: Word; Shift: TShiftState);
-    {$IFDEF ANDROID}
   private
-    // Android: left toolbar column scrolls vertically when the screen is shorter than the editor needs
+    // Left toolbar column scrolls vertically when the screen is shorter than the editor needs
     fSideScroll, fSideScrollMax: Integer;
 
     fSideCtrls: array of TKMControl;
     procedure SideUnscroll;
     procedure SideSnapshotAndScroll;
-    {$ENDIF}
   protected
     Panel_Sidebar: TKMPanel;
     MinimapView: TKMMinimapView;
@@ -152,10 +150,8 @@ type
   public
     constructor Create(aRender: TKMRender; var aMapSaveStarted, aMapSaveEnded: TKMEvent);
     destructor Destroy; override;
-    {$IFDEF ANDROID}
     procedure ScrollSidebar(aDelta: Integer);
     function IsOverScrollableSidebar(X, Y: Integer): Boolean;
-    {$ENDIF}
 
     procedure ShowMessage(const aText: string);
     procedure ExportPages(const aPath: string); override;
@@ -1703,9 +1699,7 @@ procedure TKMMapEdInterface.Resize(X,Y: Word);
 var
   visH, tbW: Integer;
 begin
-  {$IFDEF ANDROID}
   SideUnscroll;
-  {$ENDIF}
   Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
   inherited;
 
@@ -1729,13 +1723,10 @@ begin
 
   // Put Form_History back into window, if it goes out of it
   History_UpdatePos;
-  {$IFDEF ANDROID}
   SideSnapshotAndScroll;
-  {$ENDIF}
 end;
 
 
-{$IFDEF ANDROID}
 const
   MAPED_SIDEBAR_REQUIRED_HEIGHT = MENU_DESIGN_Y;
 
@@ -1803,11 +1794,11 @@ begin
   lx := X;
   ly := Y;
   MinimapView.ScreenToLocal(lx, ly);
-  Result := (fSideScrollMax > 0) and (X < GetToolbarWidth)
+  Result := (fSideScrollMax > 0) and (X >= GetSafeInsetLeft) and (X < GetToolbarWidth)
             and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
                      and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
-{$ENDIF}
+
 
 
 

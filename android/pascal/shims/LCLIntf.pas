@@ -12,6 +12,7 @@ function OpenURL(const aURL: string): Boolean;
 function OpenDocument(const aPath: string): Boolean;
 function GetTickCount: Cardinal;
 function GetDoubleClickTime: Cardinal;
+function CreateIconIndirect(IconInfo: PIconInfo): HICON;
 
 implementation
 uses
@@ -62,5 +63,11 @@ begin
   Result := 500;
 end;
 
+function CreateIconIndirect(IconInfo: PIconInfo): HICON;
+begin
+  Result := 0;
+end;
+
 
 end.
+

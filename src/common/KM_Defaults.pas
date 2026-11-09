@@ -1,6 +1,8 @@
 unit KM_Defaults;
 {$I KaM_Remake.inc}
 interface
+uses
+  KM_Platform;
 
 // Global constants
 const
@@ -127,7 +129,8 @@ var
   DBG_SHOW_EXACT_WARE_COUNT         :Boolean = DEBUG_CFG; // Do we show resource amount with K postfix (10123 -> 10k)
   DBG_SKIP_SAVE_POINTS_TO_FILE      :Boolean = False; // Skip save game savepoints (into .spt file)
   DBG_GAME_SAVE_STRIP_FOR_CRC       :Boolean = False; // Strip unsynced data from Game saves, to compare saves CRC
-  DBG_ALLOW_LOAD_UNSUP_VERSION_SAVE :Boolean = {$IFDEF ANDROID}True{$ELSE}DEBUG_CFG{$ENDIF}; //Allow to try load saves / replay with unsupported version
+  DBG_ALLOW_LOAD_UNSUP_VERSION_SAVE :Boolean = DEFAULT_ALLOW_UNSUP_VERSION_SAVE; //Allow to try load saves / replay with unsupported version
+
   DBG_UPDATE_DELIVERY_MODE_IMMEDIATELY: Boolean = DEBUG_CFG; // Do we update house delivery mode immediately ?
 
   DBG_LOG_SETTINGS_SAVE_CALLSTACK   :Boolean = False; //

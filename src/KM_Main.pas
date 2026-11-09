@@ -1,8 +1,5 @@
 unit KM_Main;
 {$I KaM_Remake.inc}
-{$IFDEF ANDROID}
-{$I KM_MainAndroid.inc}
-{$ELSE}
 interface
 uses
   {$IFDEF MSWindows} Windows, {$ENDIF}
@@ -961,6 +958,5 @@ begin
 end;
 
 
-{$ENDIF}
-
 end.
+

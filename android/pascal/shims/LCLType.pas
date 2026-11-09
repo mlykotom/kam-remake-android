@@ -11,6 +11,24 @@ type
   HICON = PtrUInt;
   THandle = System.THandle;
   TKeyBoardState = array[0..255] of Byte;
+
+  TRGBQuad = packed record
+    rgbBlue: Byte;
+    rgbGreen: Byte;
+    rgbRed: Byte;
+    rgbReserved: Byte;
+  end;
+  PRGBQuad = ^TRGBQuad;
+
+  TIconInfo = record
+    fIcon: Boolean;
+    xHotspot: Cardinal;
+    yHotspot: Cardinal;
+    hbmMask: PtrUInt;
+    hbmColor: PtrUInt;
+  end;
+  PIconInfo = ^TIconInfo;
+
 const
   VK_LBUTTON = 1;
   VK_RBUTTON = 2;

@@ -213,15 +213,13 @@ type
     Label_TeamName: TKMLabel;
 
     Panel_Controls: TKMPanel;
-    {$IFDEF ANDROID}
-    // Android: sidebar can be scrolled vertically when the screen is shorter than the sidebar needs
+    // Sidebar can be scrolled vertically when the screen is shorter than the sidebar needs
     fSidebarScroll: Integer;
     fSidebarScrollMax: Integer;
     fControlsBaseTop: Integer;
   private
     procedure ApplySidebarScroll;
   protected
-    {$ENDIF}
 
       Button_Main: array [tbBuild..tbMenu] of TKMButton; // 4 common buttons + Return
       Button_Back: TKMButton;
@@ -382,12 +380,10 @@ type
     procedure MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
     procedure Resize(X,Y: Word); override;
-    {$IFDEF ANDROID}
     procedure ScrollSidebar(aDelta: Integer);
     function IsOverScrollableSidebar(X, Y: Integer): Boolean;
     function IsFullScreenPageVisible: Boolean;
     property SidebarScrollMax: Integer read fSidebarScrollMax;
-    {$ENDIF}
     procedure SyncUI(aMoveViewport: Boolean = True); override;
     procedure UpdateHotkeys; override;
     procedure UpdateState(aGlobalTickCount: Cardinal); override;
@@ -1023,10 +1019,8 @@ begin
   // Needs to be -10 when the swords are hidden so it fits 1024x576
   Panel_Controls.Top := Sidebar_Top.Height - 10 + (10+Sidebar_Middle.Height) * Byte(showSwords);
   Panel_Controls.Height := visH - Panel_Controls.Top;
-  {$IFDEF ANDROID}
   fControlsBaseTop := Panel_Controls.Top;
   ApplySidebarScroll;
-  {$ENDIF}
 
   Image_Chat.Left := tbW;
   Label_ChatUnread.Left := tbW;
@@ -1066,7 +1060,6 @@ begin
 end;
 
 
-{$IFDEF ANDROID}
 const
   // Gameplay sidebar is designed to fit 576px height (swords filler hidden)
   SIDEBAR_REQUIRED_HEIGHT = 576;
@@ -1112,11 +1105,11 @@ begin
   lx := X;
   ly := Y;
   MinimapView.ScreenToLocal(lx, ly);
-  Result := (fSidebarScrollMax > 0) and (X < GetToolbarWidth)
+  Result := (fSidebarScrollMax > 0) and (X >= GetSafeInsetLeft) and (X < GetToolbarWidth)
             and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
                      and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
-{$ENDIF}
+
 
 
 { Pause overlay page }

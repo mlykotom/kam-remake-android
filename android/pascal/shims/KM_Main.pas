@@ -1,6 +1,8 @@
-// Android implementation of KM_Main (included from KM_Main.pas when ANDROID is defined)
+unit KM_Main;
+{$I KaM_Remake.inc}
+// Android implementation of KM_Main (shadows src/KM_Main.pas via -Fu search path).
 // There are no forms on Android: Java GLSurfaceView owns the GL context and drives frames,
-// input arrives through KM_AndroidHost (JNI glue)
+// input arrives through KMAndroidHost (JNI glue)
 interface
 uses
   Classes, Types,
@@ -484,3 +486,6 @@ procedure TKMMain.ApplyCursorRestriction;
 begin
   //No cursor on a touch screen
 end;
+
+
+end.
