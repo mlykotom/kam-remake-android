@@ -20,6 +20,7 @@ internal object KaMNative {
     @JvmStatic external fun init(dataDir: String, width: Int, height: Int): Boolean
     @JvmStatic external fun frame()
     @JvmStatic external fun resize(width: Int, height: Int)
+    @JvmStatic external fun setSafeInsets(left: Int, right: Int)
     @JvmStatic external fun pause()
     @JvmStatic external fun resume()
     @JvmStatic external fun shutdown()

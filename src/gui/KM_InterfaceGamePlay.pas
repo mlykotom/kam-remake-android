@@ -928,7 +928,7 @@ begin
     S.Hitable := False;
   end;
 
-  Panel_Stats := TKMPanel.Create(Panel_Main, (aRender.ScreenX - MENU_DESIGN_X) div 2, (aRender.ScreenY - MENU_DESIGN_Y) div 2, MENU_DESIGN_X, MENU_DESIGN_Y);
+  Panel_Stats := TKMPanel.Create(Panel_Main, (Panel_Main.Width - MENU_DESIGN_X) div 2, (Panel_Main.Height - MENU_DESIGN_Y) div 2, MENU_DESIGN_X, MENU_DESIGN_Y);
   Panel_Stats.AnchorsCenter;
 
   // Background image
@@ -1003,7 +1003,7 @@ begin
   Panel_Stats.Top := (Panel_Main.Height - Panel_Stats.Height) div 2;
   Panel_Stats.Height := Min(Panel_Main.Height, MENU_DESIGN_Y);
 
-  Panel_Stats_Background.Left := -Panel_Stats.Left;
+  Panel_Stats_Background.Left := -Panel_Stats.AbsLeft;
   Panel_Stats_Background.Top := -Panel_Stats.Top;
   Panel_Stats_Background.Width := X;
   Panel_Stats_Background.Height := Y;
@@ -1067,7 +1067,7 @@ end;
 function TKMGamePlayInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
 
 begin
-  Result := (fSidebarScrollMax > 0) and (X < TOOLBAR_WIDTH)
+  Result := (fSidebarScrollMax > 0) and (X < GetToolbarWidth)
             and not ((X >= MinimapView.AbsLeft) and (X < MinimapView.AbsLeft + MinimapView.Width)
                      and (Y >= MinimapView.AbsTop) and (Y < MinimapView.AbsTop + MinimapView.Height));
 end;
@@ -2898,7 +2898,7 @@ begin
   texID := gRes.Cursors.CursorTexID(aDir);
   Image_DirectionCursor.Visible := True;
   Image_DirectionCursor.TexID   := texID;
-  Image_DirectionCursor.Left    := X + Round(gRes.Cursors.CursorOffset(aDir).X * DIR_CURSOR_SCALE);
+  Image_DirectionCursor.AbsLeft := X + Round(gRes.Cursors.CursorOffset(aDir).X * DIR_CURSOR_SCALE);
   Image_DirectionCursor.Top     := Y + Round(gRes.Cursors.CursorOffset(aDir).Y * DIR_CURSOR_SCALE);
   Image_DirectionCursor.Width   := Round(gGFXData[rxGui, texID].PxWidth * DIR_CURSOR_SCALE);
   Image_DirectionCursor.Height  := Round(gGFXData[rxGui, texID].PxHeight * DIR_CURSOR_SCALE);
@@ -3346,7 +3346,7 @@ begin
   // Don't render toolbar when SAVE_MAP_TO_FBO is set
   if SAVE_MAP_TO_FBO_RENDER then Exit(0);
 
-  Result := TOOLBAR_WIDTH;
+  Result := TOOLBAR_WIDTH + GetSafeInsetLeft;
 end;
 
 
@@ -4615,9 +4615,9 @@ begin
           mapLoc := gTerrain.FlatToHeight(loc);
           screenLoc := fViewport.MapToScreen(mapLoc);
 
-          if KMInRect(screenLoc, KMRect(0, 0, Panel_Main.Width, Panel_Main.Height)) then
+          if KMInRect(screenLoc, fViewport.ViewRect) then
           begin
-            Label_TeamName.Left := screenLoc.X;
+            Label_TeamName.AbsLeft := screenLoc.X;
             Label_TeamName.Top := screenLoc.Y;
             Label_TeamName.Paint;
           end;
@@ -4651,9 +4651,9 @@ begin
             mapLoc := gTerrain.FlatToHeight(loc);
             screenLoc := fViewport.MapToScreen(mapLoc);
 
-            if KMInRect(screenLoc, KMRect(0, 0, Panel_Main.Width, Panel_Main.Height)) then
+            if KMInRect(screenLoc, fViewport.ViewRect) then
             begin
-              Label_TeamName.Left := screenLoc.X;
+              Label_TeamName.AbsLeft := screenLoc.X;
               Label_TeamName.Top := screenLoc.Y;
               Label_TeamName.Paint;
             end;
@@ -4679,12 +4679,13 @@ begin
           mapLoc := gTerrain.FlatToHeight(loc);
           screenLoc := fViewport.MapToScreen(mapLoc);
 
-          if KMInRect(screenLoc, KMRect(0, 0, Panel_Main.Width, Panel_Main.Height)) then
+          if KMInRect(screenLoc, fViewport.ViewRect) then
           begin
-            Label_TeamName.Left := screenLoc.X;
+            Label_TeamName.AbsLeft := screenLoc.X;
             Label_TeamName.Top := screenLoc.Y;
             Label_TeamName.Paint;
           end;
+
         except
           on E: Exception do
             ; //Just ignore exceptions here, since its UI function

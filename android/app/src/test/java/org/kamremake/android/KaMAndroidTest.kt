@@ -132,6 +132,19 @@ class KaMAndroidTest {
         assertTrue(gameScaled.height >= KaMView.MIN_GAME_HEIGHT)
         assertEquals(0, gameScaled.width and 1)
         assertEquals(0, gameScaled.height and 1)
+
+        // With a left cutout inset in-game at max scale 2.0, safe virtual width still fits MIN_GAME_WIDTH
+        val cutoutLeftPx = 120
+        val gameCutout = KaMView.calculateVirtualSize(
+            w = 1920,
+            h = 1080,
+            uiScale = 2.0f,
+            inGame = true,
+            cutoutLeftPx = cutoutLeftPx,
+            cutoutRightPx = 0
+        )
+        val virtSafeLeft = kotlin.math.round(cutoutLeftPx * gameCutout.touchScaleX).toInt()
+        assertTrue(gameCutout.width - virtSafeLeft >= KaMView.MIN_GAME_WIDTH - 1)
     }
 
     @Test
@@ -150,6 +163,7 @@ class KaMAndroidTest {
         assertStaticMethod("init", Boolean::class.javaPrimitiveType!!, String::class.java, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("frame", Void.TYPE, expectNative = true)
         assertStaticMethod("resize", Void.TYPE, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, expectNative = true)
+        assertStaticMethod("setSafeInsets", Void.TYPE, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("pause", Void.TYPE, expectNative = true)
         assertStaticMethod("resume", Void.TYPE, expectNative = true)
         assertStaticMethod("shutdown", Void.TYPE, expectNative = true)

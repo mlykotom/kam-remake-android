@@ -45,6 +45,8 @@ type
     function GetHintPositionBase: TKMPoint; override;
     function GetHintFont: TKMFont; override;
     function GetHintKind: TKMHintKind; override;
+    function GetSafeInsetLeft: Integer; override;
+    function GetSafeInsetRight: Integer; override;
 
     function GetDebugInfo: string; virtual;
 
@@ -74,6 +76,7 @@ type
     procedure MouseMove(Shift: TShiftState; X,Y: Integer; var aHandled: Boolean); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
+    procedure Resize(X,Y: Word); override;
 
     procedure ShowDebugInfo;
 
@@ -202,6 +205,7 @@ const
 
 implementation
 uses
+  {$IFDEF ANDROID_PORT} KMAndroidHost, {$ENDIF}
   StrUtils, KromUtils,
   KM_AIDefensePos,
   KM_Cursor, KM_Main, KM_System,
@@ -259,7 +263,27 @@ end;
 
 function TKMUserInterfaceGame.GetHintPositionBase: TKMPoint;
 begin
-  Result := TKMPoint.New(GetToolbarWidth + 35, Panel_Main.Height);
+  Result := TKMPoint.New(GetToolbarWidth - GetSafeInsetLeft + 35, Panel_Main.Height);
+end;
+
+
+function TKMUserInterfaceGame.GetSafeInsetLeft: Integer;
+begin
+  {$IFDEF ANDROID_PORT}
+  Result := gHostSafeInsetLeft;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+
+function TKMUserInterfaceGame.GetSafeInsetRight: Integer;
+begin
+  {$IFDEF ANDROID_PORT}
+  Result := gHostSafeInsetRight;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
 end;
 
 
@@ -496,14 +520,25 @@ end;
 
 
 procedure TKMUserInterfaceGame.InitDebugControls;
+var
+  tbW: Integer;
 begin
+  tbW := ToolbarWidth - GetSafeInsetLeft;
   // Debugging displays
-  Bevel_DebugInfo := TKMBevel.Create(Panel_Main, ToolbarWidth + 8 - 10, 133 - 10, Panel_Main.Width - ToolbarWidth - 8, 0);
+  Bevel_DebugInfo := TKMBevel.Create(Panel_Main, tbW + 8 - 10, 133 - 10, Panel_Main.Width - tbW - 8, 0);
   Bevel_DebugInfo.BackAlpha := 0.5;
   Bevel_DebugInfo.Hitable := False;
   Bevel_DebugInfo.Hide;
-  Label_DebugInfo := TKMLabel.Create(Panel_Main, ToolbarWidth + 8, 133, '', fntMonospaced, taLeft);
+  Label_DebugInfo := TKMLabel.Create(Panel_Main, tbW + 8, 133, '', fntMonospaced, taLeft);
   Label_DebugInfo.Hide;
+end;
+
+
+procedure TKMUserInterfaceGame.Resize(X, Y: Word);
+begin
+  inherited;
+  if fViewport <> nil then
+    fViewport.ToolbarWidth := GetToolbarWidth;
 end;
 
 
@@ -618,6 +653,8 @@ end;
 
 
 procedure TKMUserInterfaceGame.Paint;
+var
+  I: Integer;
 begin
   if (mlDefencesAll in gGameParams.VisibleLayers) then
     fPaintDefences := True;
@@ -627,8 +664,13 @@ begin
 
   fPaintDefences := False;
 
+  if (GetSafeInsetLeft > 0) and (GetToolbarWidth > 0) then
+    for I := 0 to (Panel_Main.Height div 400) do
+      TKMRenderUI.WritePicture(0, I * 400, 224, 400, [anLeft, anTop], rxGui, 404, True);
+
   inherited;
 end;
+
 
 
 procedure TKMUserInterfaceGame.GameSpeedChanged(aFromSpeed, aToSpeed: Single);
