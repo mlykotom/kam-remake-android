@@ -547,9 +547,10 @@ const
   PAD_DBG_X = 5;
   PAD_DBG_Y = 3;
 var
-  hintBase, hintTxtOffset: TKMPoint;
+  hintBase, hintTxtOffset, hintOrig: TKMPoint;
   hintBackRect: TKMRect;
-  left, top: Integer;
+  left, top, cLeft, cTop, cRight, cBottom: Integer;
+  hintScale: Single;
 begin
   if DBG_UI_HINT_POS then
   begin
@@ -605,17 +606,26 @@ begin
 
   if Label_Hint.TextSize.X = 0 then Exit;
 
+  hintScale := fHintCtrl.EffectiveRenderScale;
+  hintOrig := fHintCtrl.ScaledOrigin;
+
   case GetHintActualKind of
     hkControl:      begin
+                      cLeft := fHintCtrl.AbsLeft;
+                      cTop := fHintCtrl.AbsTop;
+                      cRight := fHintCtrl.AbsRight;
+                      cBottom := fHintCtrl.AbsBottom;
+                      fHintCtrl.LocalToScreen(cLeft, cTop);
+                      fHintCtrl.LocalToScreen(cRight, cBottom);
                       Bevel_HintBG.Width := Label_Hint.TextSize.X + PAD;
                       Bevel_HintBG.Height := Label_Hint.TextSize.Y + PAD;
-                      Bevel_HintBG.AbsLeft := EnsureRange(fHintCtrl.AbsLeft + fHintCtrl.Width div 2 - Bevel_HintBG.Width div 2,
+                      Bevel_HintBG.AbsLeft := EnsureRange((cLeft + cRight) div 2 - Bevel_HintBG.Width div 2,
                                                           Panel_Main.AbsLeft + MARGIN, Panel_Main.AbsRight - Bevel_HintBG.Width - MARGIN);
 
-                      Bevel_HintBG.AbsTop := fHintCtrl.AbsTop - Bevel_HintBG.Height - FONT_Y_FIX;
+                      Bevel_HintBG.AbsTop := cTop - Bevel_HintBG.Height - FONT_Y_FIX;
 
                       if Bevel_HintBG.AbsTop <= 0 then
-                        Bevel_HintBG.AbsTop := fHintCtrl.AbsTop + fHintCtrl.Height + FONT_Y_FIX;
+                        Bevel_HintBG.AbsTop := cBottom + FONT_Y_FIX;
 
                       Label_Hint.AbsLeft := Bevel_HintBG.AbsLeft + PAD div 2;//Bevel_HintBG.Width div 2;
                       Label_Hint.AbsTop := Bevel_HintBG.AbsTop + PAD div 2 + (FONT_Y_FIX - 1);
@@ -663,10 +673,18 @@ begin
   Bevel_HintBG.Show;
   Label_Hint.Show;
 
+  if (GetHintActualKind = hkTextNotFit) and (hintScale <> 1) then
+    TKMRenderUI.PushScale(hintOrig.X, hintOrig.Y, hintScale);
+
+
   Bevel_HintBG.Paint;
   Label_Hint.Paint;
 
+  if (GetHintActualKind = hkTextNotFit) and (hintScale <> 1) then
+    TKMRenderUI.PopScale;
+
   Bevel_HintBG.Hide;
+
   Label_Hint.Hide;
 end;
 

@@ -37,6 +37,7 @@ type
     procedure Refresh;
     function Visible: Boolean;
     procedure Hide;
+    procedure SetLeft(aLeft: Integer);
   end;
 
 
@@ -205,6 +206,13 @@ function TKMMapEdExtras.Visible: Boolean;
 begin
   Result := Panel_Extra.Visible;
 end;
+
+
+procedure TKMMapEdExtras.SetLeft(aLeft: Integer);
+begin
+  Panel_Extra.Left := aLeft;
+end;
+
 
 
 end.

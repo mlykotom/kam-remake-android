@@ -37,6 +37,7 @@ type
     procedure Show;
     procedure Hide;
     function Visible: Boolean;
+    procedure SetLeft(aLeft: Integer);
     procedure UpdateState;
   end;
 
@@ -344,6 +345,13 @@ function TKMGUIGameAllies.Visible: Boolean;
 begin
   Result := Panel_Allies.Visible;
 end;
+
+
+procedure TKMGUIGameAllies.SetLeft(aLeft: Integer);
+begin
+  Panel_Allies.Left := aLeft;
+end;
+
 
 
 procedure TKMGUIGameAllies.UpdateState;

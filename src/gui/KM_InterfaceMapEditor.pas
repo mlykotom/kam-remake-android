@@ -120,6 +120,7 @@ type
     procedure SideSnapshotAndScroll;
     {$ENDIF}
   protected
+    Panel_Sidebar: TKMPanel;
     MinimapView: TKMMinimapView;
     Label_Coordinates: TKMLabel;
     Label_Info: TKMLabel;
@@ -190,7 +191,7 @@ implementation
 uses
   KM_System,
   KM_HandsCollection, KM_Hand, KM_HandTypes, KM_HandEntity,
-  KM_ResTexts, KM_Game, KM_GameParams, KM_Cursor,
+  KM_ResTexts, KM_Game, KM_GameParams, KM_GameSettings, KM_Cursor,
   KM_Resource, KM_ResHouses, KM_TerrainDeposits, KM_ResKeys, KM_GameApp,
   KM_AIDefensePos, KM_RenderUI, KM_ResFonts, KM_CommonClasses, KM_UnitWarrior,
   KM_InterfaceDefaults, KM_Units, KM_UnitGroup, KM_Terrain, KM_Maps,
@@ -229,20 +230,23 @@ begin
 
   ResetDragObject;
   //                                   250
+  Panel_Sidebar := TKMPanel.Create(Panel_Main, 0, 0, MAPED_TOOLBAR_WIDTH, Panel_Main.Height);
+  Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
+
   // Left panel background
-  TKMImage.Create(Panel_Main, 0, -200, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
-  TKMImage.Create(Panel_Main, 0,  200, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
-  TKMImage.Create(Panel_Main, 0,  600, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0, -200, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0,  200, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0,  600, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
   // For 1600x1200 this is needed
-  TKMImage.Create(Panel_Main, 0, 1000, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
-  TKMImage.Create(Panel_Main, 0, 1400, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0, 1000, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0, 1400, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
   // For 4K displays
-  TKMImage.Create(Panel_Main, 0, 1800, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0, 1800, MAPED_TOOLBAR_WIDTH, 400, 404, rxGui, [anLeft, anTop, anRight]);
 
   // Minimap place is drawn last
-  TKMImage.Create(Panel_Main, 0,    0,                 220, 200, 679, rxGui, [anLeft, anTop, anRight]);
+  TKMImage.Create(Panel_Sidebar, 0,    0,                 220, 200, 679, rxGui, [anLeft, anTop, anRight]);
 
-  MinimapView := TKMMinimapView.Create(fMinimap, Panel_Main, 10, 10, TB_MAP_ED_WIDTH - 40, 176);
+  MinimapView := TKMMinimapView.Create(fMinimap, Panel_Sidebar, 10, 10, TB_MAP_ED_WIDTH - 40, 176);
   MinimapView.OnMinimapChange := Minimap_OnUpdate;
 
   Label_MissionName := TKMLabel.Create(Panel_Main, MAPED_TOOLBAR_WIDTH + 4, 10, 500, 10, NO_TEXT, fntGrey, taLeft);
@@ -252,7 +256,7 @@ begin
 //  TKMLabel.Create(Panel_Main, TB_PAD, 190, TB_WIDTH, 0, gResTexts[TX_MAPED_PLAYERS], fntOutline, taLeft);
   for I := 0 to MAX_HANDS - 1 do
   begin
-    Button_PlayerSelect[I]         := TKMFlatButtonShape.Create(Panel_Main, TB_PAD + (I mod HND_COL)*(HND_S+HND_P),
+    Button_PlayerSelect[I]         := TKMFlatButtonShape.Create(Panel_Sidebar, TB_PAD + (I mod HND_COL)*(HND_S+HND_P),
                                                                 190 + (HND_S+HND_P)*(I div HND_COL),
                                                                 HND_S, HND_S, IntToStr(I+1), fntGrey, $FF0000FF);
     Button_PlayerSelect[I].Tag     := I;
@@ -261,7 +265,7 @@ begin
   Button_PlayerSelect[0].Down := True; //First player selected by default
 
 
-  Panel_MinimapButtons := TKMPanel.Create(Panel_Main, MinimapView.Right + MMAP_BTN_GAP, TOP_SIDE_BTN,
+  Panel_MinimapButtons := TKMPanel.Create(Panel_Sidebar, MinimapView.Right + MMAP_BTN_GAP, TOP_SIDE_BTN,
                                           MMAP_BTN_W, MMAP_BTNS_CNT * MMAP_BTN_H + MMAP_BTNS_GAP * (MMAP_BTNS_CNT - 1));
 
   Button_History := TKMButtonFlat.Create(Panel_MinimapButtons, 0, 0, MMAP_BTN_W, MMAP_BTN_H, 677);
@@ -311,7 +315,7 @@ begin
   fGuiExtras := TKMMapEdExtras.Create(Panel_Main, PageChanged);
   fGuiMessage := TKMMapEdMessage.Create(Panel_Main);
 
-  Panel_Common := TKMPanel.Create(Panel_Main,TB_PAD_MAP_ED,262,TB_MAP_ED_WIDTH,Panel_Main.Height - 262);
+  Panel_Common := TKMPanel.Create(Panel_Sidebar,TB_PAD_MAP_ED,262,TB_MAP_ED_WIDTH,Panel_Main.Height - 262);
   Panel_Common.Anchors := [anLeft, anTop, anBottom];
 
   {5 big tabs}
@@ -399,6 +403,7 @@ begin
   InitDebugControls;
 
   HidePages;
+  Resize(aRender.ScreenX, aRender.ScreenY);
   AfterCreateComplete;
 end;
 
@@ -923,11 +928,17 @@ end;
 
 
 function TKMMapEdInterface.GetToolbarWidth: Integer;
+var
+  scale: Single;
 begin
   // Don't render toolbar when SAVE_MAP_TO_FBO is set
   if SAVE_MAP_TO_FBO_RENDER then Exit(0);
 
-  Result := MAPED_TOOLBAR_WIDTH + GetSafeInsetLeft;
+  if Panel_Sidebar <> nil then
+    scale := Panel_Sidebar.RenderScale
+  else
+    scale := gGameSettings.SidebarScale;
+  Result := Round(MAPED_TOOLBAR_WIDTH * scale) + GetSafeInsetLeft;
 end;
 
 
@@ -1283,6 +1294,8 @@ end;
 
 procedure TKMMapEdInterface.MapEdOptionsWereChanged;
 begin
+  if Panel_Sidebar.RenderScale <> gGameSettings.SidebarScale then
+    Resize(fViewport.ViewRect.Right, fViewport.ViewRect.Bottom);
   fMinimap.Update;
 end;
 
@@ -1687,11 +1700,28 @@ end;
 
 
 procedure TKMMapEdInterface.Resize(X,Y: Word);
+var
+  visH, tbW: Integer;
 begin
   {$IFDEF ANDROID}
   SideUnscroll;
   {$ENDIF}
+  Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
   inherited;
+
+  visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
+  tbW := Round(MAPED_TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
+  Panel_Sidebar.Height := visH;
+
+  Label_MissionName.Left := tbW + 4;
+  Label_Coordinates.Left := tbW + 4;
+  Label_Info.Left := tbW + 4;
+  Image_Extra.Left := tbW;
+  Image_Message.Left := tbW;
+  fGuiExtras.SetLeft(Max(0, Min(tbW + 30, Panel_Main.Width - 600)));
+  fGuiMessage.SetLeft(Max(0, Min(tbW + 30, Panel_Main.Width - 600)));
+  Bevel_DebugInfo.Left := tbW + 8 - 10;
+  Label_DebugInfo.Left := tbW + 8;
 
   fViewport.Resize(X, Y);
   fGuiTerrain.Resize;
@@ -1724,14 +1754,14 @@ end;
 // Collect controls of the left column (after layout) and apply the scroll offset
 procedure TKMMapEdInterface.SideSnapshotAndScroll;
 var
-  I, cnt: Integer;
+  I, cnt, visH: Integer;
   C: TKMControl;
 begin
-  SetLength(fSideCtrls, Panel_Main.ChildCount);
+  SetLength(fSideCtrls, Panel_Sidebar.ChildCount);
   cnt := 0;
-  for I := 0 to Panel_Main.ChildCount - 1 do
+  for I := 0 to Panel_Sidebar.ChildCount - 1 do
   begin
-    C := Panel_Main.Childs[I];
+    C := Panel_Sidebar.Childs[I];
     if (C.Left >= 0) and (C.Left < MAPED_TOOLBAR_WIDTH - 4) and (C.Left + C.Width <= MAPED_TOOLBAR_WIDTH + 2) then
     begin
       fSideCtrls[cnt] := C;
@@ -1744,7 +1774,8 @@ begin
   if Panel_Common.Top + Panel_Common.Height < MAPED_SIDEBAR_REQUIRED_HEIGHT then
     Panel_Common.Height := MAPED_SIDEBAR_REQUIRED_HEIGHT - Panel_Common.Top;
 
-  fSideScrollMax := Max(0, MAPED_SIDEBAR_REQUIRED_HEIGHT - Panel_Main.Height);
+  visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
+  fSideScrollMax := Max(0, MAPED_SIDEBAR_REQUIRED_HEIGHT - visH);
 
   fSideScroll := EnsureRange(fSideScroll, 0, fSideScrollMax);
   if fSideScroll <> 0 then
@@ -1757,7 +1788,7 @@ procedure TKMMapEdInterface.ScrollSidebar(aDelta: Integer);
 var
   I, newScroll: Integer;
 begin
-  newScroll := EnsureRange(fSideScroll + aDelta, 0, fSideScrollMax);
+  newScroll := EnsureRange(fSideScroll + Round(aDelta / Panel_Sidebar.RenderScale), 0, fSideScrollMax);
   if newScroll = fSideScroll then Exit;
   for I := 0 to High(fSideCtrls) do
     fSideCtrls[I].Top := fSideCtrls[I].Top + fSideScroll - newScroll;
@@ -1766,13 +1797,18 @@ end;
 
 
 function TKMMapEdInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
+var
+  lx, ly: Integer;
 begin
+  lx := X;
+  ly := Y;
+  MinimapView.ScreenToLocal(lx, ly);
   Result := (fSideScrollMax > 0) and (X < GetToolbarWidth)
-
-            and not ((X >= MinimapView.AbsLeft) and (X < MinimapView.AbsLeft + MinimapView.Width)
-                     and (Y >= MinimapView.AbsTop) and (Y < MinimapView.AbsTop + MinimapView.Height));
+            and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
+                     and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
 {$ENDIF}
+
 
 
 

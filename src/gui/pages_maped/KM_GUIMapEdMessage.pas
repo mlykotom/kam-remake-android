@@ -20,6 +20,7 @@ type
     procedure Show(const aText: UnicodeString); overload;
     function Visible: Boolean;
     procedure Hide;
+    procedure SetLeft(aLeft: Integer);
   end;
 
 
@@ -84,6 +85,13 @@ function TKMMapEdMessage.Visible: Boolean;
 begin
   Result := Panel_Message.Visible;
 end;
+
+
+procedure TKMMapEdMessage.SetLeft(aLeft: Integer);
+begin
+  Panel_Message.Left := aLeft;
+end;
+
 
 
 end.

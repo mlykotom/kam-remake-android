@@ -77,6 +77,7 @@ type
         CheckBox_FullFonts: TKMCheckBox;
       Panel_Ctrl: TKMPanel;
         TrackBar_ScrollSpeed: TKMTrackBar;
+        TrackBar_SidebarScale: TKMTrackBar;
         Button_OptionsKeys: TKMButton;
       Panel_Game: TKMPanel;
         Bevel_Game: TKMBevel;
@@ -388,8 +389,8 @@ end;
 procedure TKMGUICommonOptions.CreateControls(var aTopBlock: Integer; var aLeftBlock: Integer);
 begin
   // Controls section
-  Panel_Ctrl := TKMPanel.Create(Panel_Options, aLeftBlock, aTopBlock, 280, 120);
-  NextBlock(aTopBlock, Panel_Ctrl, 5);
+  Panel_Ctrl := TKMPanel.Create(Panel_Options, aLeftBlock, aTopBlock, 280, 165);
+  NextBlock(aTopBlock, Panel_Ctrl, 0);
   Panel_Ctrl.Anchors := [anLeft];
     TKMLabel.Create(Panel_Ctrl,6,0,270,20,gResTexts[TX_MENU_OPTIONS_CONTROLS],fntOutline,taLeft);
     TKMBevel.Create(Panel_Ctrl,0,20,280,Panel_Ctrl.Height - 20);
@@ -398,8 +399,13 @@ begin
     TrackBar_ScrollSpeed.Caption := gResTexts[TX_MENU_OPTIONS_SCROLL_SPEED];
     TrackBar_ScrollSpeed.OnChange := Change;
 
+    TrackBar_SidebarScale := TKMTrackBar.Create(Panel_Ctrl, 10, 72, 256, 100, 200);
+    TrackBar_SidebarScale.Step := 5;
+    TrackBar_SidebarScale.Caption := 'Sidebar scale (%)';
+    TrackBar_SidebarScale.OnChange := Change;
+
     // Keybindings button
-    Button_OptionsKeys := TKMButton.Create(Panel_Ctrl, 10, 77, 260, 30, gResTexts[TX_MENU_OPTIONS_KEYBIND], bsMenu);
+    Button_OptionsKeys := TKMButton.Create(Panel_Ctrl, 10, 122, 260, 30, gResTexts[TX_MENU_OPTIONS_KEYBIND], bsMenu);
     Button_OptionsKeys.Anchors := [anLeft];
     Button_OptionsKeys.OnClick := KeysClick;
 end;
@@ -422,7 +428,7 @@ begin
   gRes.Fonts[fntMetal].GetTextSize(strSaveWareDistribution, linesSaveWareDistribution);
 
   if IsMenu then
-    Inc(aTopBlock, 40 - 20*(linesSavePT + linesAutosavePTEnd + linesSaveWareDistribution - 2));
+    Inc(aTopBlock, Max(0, 10 - 20*(linesSavePT + linesAutosavePTEnd + linesSaveWareDistribution - 2)));
 
   Panel_Game := TKMPanel.Create(Panel_Options, aLeftBlock, aTopBlock, 280, 50 + 20*(linesSavePT + linesAutosavePTEnd));
 
@@ -584,6 +590,7 @@ begin
   CheckBox_LerpAnims.Enabled    := CheckBox_LerpRender.Checked;
   CheckBox_LerpAnims.Checked    := gGameSettings.GFX.InterpolatedAnimations;
   TrackBar_ScrollSpeed.Position := Round(gGameSettings.ScrollSpeed / SCROLL_SPEED_MULTIPLIER);
+  TrackBar_SidebarScale.Position := Round(gGameSettings.SidebarScale * 100);
   TrackBar_SFX.Position         := Round(gGameSettings.SFX.SoundFXVolume * TrackBar_SFX.MaxValue);
   TrackBar_Music.Position       := Round(gGameSettings.SFX.MusicVolume * TrackBar_Music.MaxValue);
   CheckBox_MusicOff.Checked     := not gGameSettings.SFX.MusicEnabled;
@@ -663,6 +670,8 @@ begin
   CheckBox_LerpAnims.Enabled       := CheckBox_LerpRender.Checked;
 
   gGameSettings.ScrollSpeed        := TrackBar_ScrollSpeed.Position * SCROLL_SPEED_MULTIPLIER;
+  gGameSettings.SidebarScale       := TrackBar_SidebarScale.Position / 100;
+
   gGameSettings.SFX.SoundFXVolume      := TrackBar_SFX.Position / TrackBar_SFX.MaxValue;
   gGameSettings.SFX.MusicVolume        := TrackBar_Music.Position / TrackBar_Music.MaxValue;
   gGameSettings.SFX.MusicEnabled       := not CheckBox_MusicOff.Checked;

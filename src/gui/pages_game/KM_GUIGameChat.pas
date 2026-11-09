@@ -57,6 +57,7 @@ type
     procedure Show;
     procedure Hide;
     function Visible: Boolean;
+    procedure SetLeft(aLeft: Integer);
   end;
 
 
@@ -450,6 +451,13 @@ function TKMGUIGameChat.Visible: Boolean;
 begin
   Result := Panel_Chat.Visible;
 end;
+
+
+procedure TKMGUIGameChat.SetLeft(aLeft: Integer);
+begin
+  Panel_Chat.Left := aLeft;
+end;
+
 
 
 end.

@@ -1092,20 +1092,28 @@ end;
 function kam_text_input_bottom: Integer; cdecl;
 var
   ctrls: TKMMasterControl;
+  sx, sy: Integer;
 begin
   Result := -1;
   ctrls := ActiveControls;
   if (ctrls <> nil) and (ctrls.CtrlFocus is TKMSelectableEdit) then
   begin
-    Result := ctrls.CtrlFocus.AbsTop + ctrls.CtrlFocus.Height;
+    sx := ctrls.CtrlFocus.AbsLeft;
+    sy := ctrls.CtrlFocus.AbsTop + ctrls.CtrlFocus.Height;
+    ctrls.CtrlFocus.LocalToScreen(sx, sy);
+    Result := sy;
     // Field in the scrollable sidebar below the screen edge: scroll the sidebar to show it first
     if (Result > gHostScreenHeight) and (gGame <> nil) and (gGameApp.ActiveInterface is TKMUserInterfaceGame) then
     begin
       ScrollSidebarOf(gGameApp.ActiveInterface, Result - gHostScreenHeight + 4);
-      Result := ctrls.CtrlFocus.AbsTop + ctrls.CtrlFocus.Height;
+      sx := ctrls.CtrlFocus.AbsLeft;
+      sy := ctrls.CtrlFocus.AbsTop + ctrls.CtrlFocus.Height;
+      ctrls.CtrlFocus.LocalToScreen(sx, sy);
+      Result := sy;
     end;
   end;
 end;
+
 
 
 // 1 once after the user tapped a text field
