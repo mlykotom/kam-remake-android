@@ -506,8 +506,10 @@ const
   DATE_TIME_ZERO: TDateTime = 0; // DateTime as 0, for simplicity. Some compilers (Delphi Berlin, f.e.) can't handle TDateTime(0)
 
 const
-  DIR_CURSOR_CIRCLE_RAD  = 32; //Radius of the direction selector cursor restriction area
-  DIR_CURSOR_NA_RAD = 20;  //Radius of centeral part that has no direction
+  DIR_CURSOR_SCALE       = 2.5; //Visual scale factor for the troop direction flower
+  DIR_CURSOR_CIRCLE_RAD  = Round(32 * DIR_CURSOR_SCALE); //Radius of the direction selector cursor restriction area
+  DIR_CURSOR_NA_RAD      = Round(16 * DIR_CURSOR_SCALE); //Radius of central part that has no direction
+
 
 
 type
