@@ -23,6 +23,7 @@ typedef struct {
   void (*Quit)(void);
   void (*PlayVideo)(const char *path, int volume, int stretch);
   void (*StopVideo)(void);
+  void (*Haptic)(void);
 } kam_host_callbacks;
 
 // Exported by libkamcore.so
@@ -48,7 +49,7 @@ extern void kam_selftest(const char *mode);
 
 static JavaVM *g_vm;
 static jclass g_cls;
-static jmethodID m_showMessage, m_clipSet, m_clipGet, m_openUrl, m_quit, m_playVideo, m_stopVideo;
+static jmethodID m_showMessage, m_clipSet, m_clipGet, m_openUrl, m_quit, m_playVideo, m_stopVideo, m_haptic;
 static char *g_clipboard;
 
 static JNIEnv *get_env(void) {
@@ -111,6 +112,11 @@ static void cb_play_video(const char *path, int volume, int stretch) {
 static void cb_stop_video(void) {
   JNIEnv *env = get_env();
   (*env)->CallStaticVoidMethod(env, g_cls, m_stopVideo);
+}
+
+static void cb_haptic(void) {
+  JNIEnv *env = get_env();
+  (*env)->CallStaticVoidMethod(env, g_cls, m_haptic);
 }
 
 // ---------- Crash reporting: logs the faulting address and stack as library+offset ----------
@@ -296,8 +302,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
   m_quit = (*env)->GetStaticMethodID(env, g_cls, "onQuit", "()V");
   m_playVideo = (*env)->GetStaticMethodID(env, g_cls, "onPlayVideo", "(Ljava/lang/String;IZ)V");
   m_stopVideo = (*env)->GetStaticMethodID(env, g_cls, "onStopVideo", "()V");
+  m_haptic = (*env)->GetStaticMethodID(env, g_cls, "onHaptic", "()V");
 
-  static kam_host_callbacks cb = {cb_show_message, cb_clipboard_set, cb_clipboard_get, cb_open_url, cb_quit, cb_play_video, cb_stop_video};
+  static kam_host_callbacks cb = {cb_show_message, cb_clipboard_set, cb_clipboard_get, cb_open_url, cb_quit, cb_play_video, cb_stop_video, cb_haptic};
   kam_set_callbacks(&cb);
   return JNI_VERSION_1_6;
 }

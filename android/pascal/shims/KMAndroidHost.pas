@@ -13,6 +13,7 @@ type
   TKMHostQuit = procedure;
   TKMHostPlayVideo = procedure(const aPath: UnicodeString; aVolume: Integer; aStretch: Boolean);
   TKMHostStopVideo = procedure;
+  TKMHostHaptic = procedure;
 
 var
   // Pointer position in render area coordinates
@@ -36,6 +37,8 @@ var
   gHostQuit: TKMHostQuit;
   gHostPlayVideo: TKMHostPlayVideo;
   gHostStopVideo: TKMHostStopVideo;
+  gHostHaptic: TKMHostHaptic;
+
 
 
 

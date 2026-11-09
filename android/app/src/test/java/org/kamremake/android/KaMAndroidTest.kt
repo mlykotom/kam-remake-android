@@ -184,5 +184,6 @@ class KaMAndroidTest {
         assertStaticMethod("onQuit", Void.TYPE, expectNative = false)
         assertStaticMethod("onPlayVideo", Void.TYPE, String::class.java, Int::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!, expectNative = false)
         assertStaticMethod("onStopVideo", Void.TYPE, expectNative = false)
+        assertStaticMethod("onHaptic", Void.TYPE, expectNative = false)
     }
 }
