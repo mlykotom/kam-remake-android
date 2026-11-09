@@ -406,7 +406,7 @@ uses
   KM_RenderPool, KM_ResTexts, KM_Game, KM_GameApp, KM_HouseBarracks, KM_HouseTownHall,
   KM_ScriptingEvents, KM_AIFields, KM_GameAppSettings, KM_GameSettings,
   KM_ControlsDragger,
-  KM_CommonUtils, KM_ResLocales, KM_ResSound, KM_Resource, KM_Log, KM_ResKeys,
+  KM_CommonUtils, KM_ResLocales, KM_ResSound, KM_Resource, KM_ResSprites, KM_Log, KM_ResKeys,
   KM_NetRoom, KM_MessageLog, KM_NetTypes,
   KM_InterfaceMapEditor, KM_HouseWoodcutters, KM_MapTypes,
   KM_GameParams,
@@ -888,6 +888,7 @@ begin
   Create_ScriptingOverlay; // Scripting Overlay controls
 
   Image_DirectionCursor := TKMImage.Create(Panel_Main,0,0,35,36,519);
+  Image_DirectionCursor.ImageStretch;
   Image_DirectionCursor.Hide;
 
   InitDebugControls;
@@ -2891,12 +2892,18 @@ end;
 
 
 procedure TKMGamePlayInterface.DirectionCursorShow(X,Y: Integer; aDir: TKMDirection);
+var
+  texID: Integer;
 begin
+  texID := gRes.Cursors.CursorTexID(aDir);
   Image_DirectionCursor.Visible := True;
-  Image_DirectionCursor.Left    := X + gRes.Cursors.CursorOffset(aDir).X;
-  Image_DirectionCursor.Top     := Y + gRes.Cursors.CursorOffset(aDir).Y;
-  Image_DirectionCursor.TexID   := gRes.Cursors.CursorTexID(aDir);
+  Image_DirectionCursor.TexID   := texID;
+  Image_DirectionCursor.Left    := X + Round(gRes.Cursors.CursorOffset(aDir).X * DIR_CURSOR_SCALE);
+  Image_DirectionCursor.Top     := Y + Round(gRes.Cursors.CursorOffset(aDir).Y * DIR_CURSOR_SCALE);
+  Image_DirectionCursor.Width   := Round(gGFXData[rxGui, texID].PxWidth * DIR_CURSOR_SCALE);
+  Image_DirectionCursor.Height  := Round(gGFXData[rxGui, texID].PxHeight * DIR_CURSOR_SCALE);
 end;
+
 
 
 procedure TKMGamePlayInterface.DirectionCursorHide;
