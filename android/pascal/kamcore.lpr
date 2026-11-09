@@ -372,7 +372,9 @@ exports
   kam_init,
   kam_frame,
   kam_resize,
+  kam_set_safe_insets,
   kam_pause,
+
   kam_resume,
   kam_shutdown,
   kam_touch,

@@ -31,6 +31,7 @@ extern void kam_set_callbacks(kam_host_callbacks *cb);
 extern int kam_init(const char *dataDir, int width, int height);
 extern void kam_frame(void);
 extern void kam_resize(int width, int height);
+extern void kam_set_safe_insets(int left, int right);
 extern void kam_pause(void);
 extern void kam_resume(void);
 extern void kam_shutdown(void);
@@ -327,6 +328,7 @@ JNI(void, frame)(JNIEnv *env, jclass cls) {
   g_frame_start_ms = 0;
 }
 JNI(void, resize)(JNIEnv *env, jclass cls, jint w, jint h) { (void)env; (void)cls; kam_resize(w, h); }
+JNI(void, setSafeInsets)(JNIEnv *env, jclass cls, jint left, jint right) { (void)env; (void)cls; kam_set_safe_insets(left, right); }
 JNI(void, pause)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_pause(); }
 JNI(void, resume)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_resume(); }
 JNI(void, shutdown)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_shutdown(); }

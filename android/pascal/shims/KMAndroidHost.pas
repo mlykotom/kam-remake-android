@@ -22,7 +22,10 @@ var
   gHostKeyDown: array [0..255] of Boolean;
   gHostScreenWidth: Integer = 1920;
   gHostScreenHeight: Integer = 1080;
+  gHostSafeInsetLeft: Integer = 0;
+  gHostSafeInsetRight: Integer = 0;
   gHostAppActive: Boolean = True;
+
   // Debug switches read from <data>/dbg.txt (render bisecting on device)
   gAndroidDbgMask: Cardinal = 0;
   // Called right after GL entry points are loaded

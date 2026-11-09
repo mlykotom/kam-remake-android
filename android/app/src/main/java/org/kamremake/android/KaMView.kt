@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -28,6 +29,10 @@ internal class KaMView(
     @Volatile private var inGame = false
     @Volatile private var touchScaleX = 1f
     @Volatile private var touchScaleY = 1f
+    @Volatile private var cutoutLeftPx = 0
+    @Volatile private var cutoutRightPx = 0
+    @Volatile private var virtSafeLeft = 0
+    @Volatile private var virtSafeRight = 0
     private var engineStarted = false
     private var engineFailed = false
     private var textInputShown = false
@@ -45,21 +50,38 @@ internal class KaMView(
      * Menus are designed for 1024x720 and never get less; in game (map + sidebar) the UI can be made up to 2x larger.
      */
     private fun computeVirtualSize(w: Int, h: Int) {
-        val vs = calculateVirtualSize(w, h, uiScale, inGame)
+        val vs = calculateVirtualSize(w, h, uiScale, inGame, cutoutLeftPx, cutoutRightPx)
         virtW = vs.width
         virtH = vs.height
         touchScaleX = vs.touchScaleX
         touchScaleY = vs.touchScaleY
+        virtSafeLeft = (cutoutLeftPx * touchScaleX).roundToInt()
+        virtSafeRight = (cutoutRightPx * touchScaleX).roundToInt()
     }
 
     private fun applyVirtualSize() {
         if (width <= 0) return
+        val oldW = virtW
+        val oldH = virtH
         computeVirtualSize(width, height)
-        holder.setFixedSize(virtW, virtH)
+        if (virtW != oldW || virtH != oldH) {
+            holder.setFixedSize(virtW, virtH)
+        } else {
+            val sl = virtSafeLeft
+            val sr = virtSafeRight
+            queueEvent { KaMNative.setSafeInsets(sl, sr) }
+        }
     }
 
     fun setUiScale(scale: Float) {
         uiScale = scale
+        applyVirtualSize()
+    }
+
+    fun setCutoutInsets(leftPx: Int, rightPx: Int) {
+        if (leftPx == cutoutLeftPx && rightPx == cutoutRightPx) return
+        cutoutLeftPx = leftPx
+        cutoutRightPx = rightPx
         applyVirtualSize()
     }
 
@@ -74,6 +96,7 @@ internal class KaMView(
 
     override fun onSurfaceChanged(width: Int, height: Int) {
         if (engineFailed) return
+        KaMNative.setSafeInsets(virtSafeLeft, virtSafeRight)
         if (!engineStarted) {
             engineStarted = true
             if (!KaMNative.init(dataDir, width, height)) {
@@ -306,10 +329,18 @@ internal class KaMView(
             intArrayOf(MotionEvent.BUTTON_TERTIARY, 2)
         )
 
-        fun calculateVirtualSize(w: Int, h: Int, uiScale: Float, inGame: Boolean): VirtualSize {
+        fun calculateVirtualSize(
+            w: Int,
+            h: Int,
+            uiScale: Float,
+            inGame: Boolean,
+            cutoutLeftPx: Int = 0,
+            cutoutRightPx: Int = 0
+        ): VirtualSize {
             var scale = min(h.toFloat() / BASE_HEIGHT, w.toFloat() / BASE_WIDTH) * uiScale
             scale = max(scale, 0.25f)
-            val minW = if (inGame) MIN_GAME_WIDTH else BASE_WIDTH
+            val safePhysW = max(1, w - cutoutLeftPx - cutoutRightPx)
+            val minW = if (inGame) ceil(MIN_GAME_WIDTH.toDouble() * w / safePhysW).toInt() else BASE_WIDTH
             val minH = if (inGame) MIN_GAME_HEIGHT else BASE_HEIGHT
             var vw = max(minW, (w / scale).roundToInt())
             var vh = max(minH, (h / scale).roundToInt())

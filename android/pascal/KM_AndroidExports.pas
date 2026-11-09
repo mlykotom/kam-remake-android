@@ -39,6 +39,7 @@ procedure kam_set_callbacks(aCallbacks: PKMHostCallbacks); cdecl;
 function kam_init(aDataDir: PAnsiChar; aWidth, aHeight: Integer): Integer; cdecl;
 procedure kam_frame; cdecl;
 procedure kam_resize(aWidth, aHeight: Integer); cdecl;
+procedure kam_set_safe_insets(aLeft, aRight: Integer); cdecl;
 procedure kam_pause; cdecl;
 procedure kam_resume; cdecl;
 procedure kam_shutdown; cdecl;
@@ -458,6 +459,18 @@ begin
 end;
 
 
+procedure kam_set_safe_insets(aLeft, aRight: Integer); cdecl;
+begin
+  aLeft := Max(0, aLeft);
+  aRight := Max(0, aRight);
+  if (gHostSafeInsetLeft = aLeft) and (gHostSafeInsetRight = aRight) then Exit;
+  gHostSafeInsetLeft := aLeft;
+  gHostSafeInsetRight := aRight;
+  ALog(Format('kam_set_safe_insets: left=%d right=%d', [aLeft, aRight]));
+  if (gMain <> nil) and gMain.Started then
+    gMain.SurfaceResized(gHostScreenWidth, gHostScreenHeight);
+end;
+
 
 procedure kam_pause; cdecl;
 begin
@@ -598,7 +611,7 @@ begin
   ctrls := ActiveControls;
   if ctrls = nil then Exit(True);
   pt := MousePt(P);
-  Result := ctrls.HitControl(pt.X, pt.Y) <> nil;
+  Result := (pt.X < GameViewport.ToolbarWidth) or (ctrls.HitControl(pt.X, pt.Y) <> nil);
 end;
 
 

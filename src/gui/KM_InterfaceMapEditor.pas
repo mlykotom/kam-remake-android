@@ -927,7 +927,7 @@ begin
   // Don't render toolbar when SAVE_MAP_TO_FBO is set
   if SAVE_MAP_TO_FBO_RENDER then Exit(0);
 
-  Result := MAPED_TOOLBAR_WIDTH;
+  Result := MAPED_TOOLBAR_WIDTH + GetSafeInsetLeft;
 end;
 
 
@@ -1767,7 +1767,8 @@ end;
 
 function TKMMapEdInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
 begin
-  Result := (fSideScrollMax > 0) and (X < MAPED_TOOLBAR_WIDTH)
+  Result := (fSideScrollMax > 0) and (X < GetToolbarWidth)
+
             and not ((X >= MinimapView.AbsLeft) and (X < MinimapView.AbsLeft + MinimapView.Width)
                      and (Y >= MinimapView.AbsTop) and (Y < MinimapView.AbsTop + MinimapView.Height));
 end;

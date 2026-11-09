@@ -40,11 +40,13 @@ type
     function GetTopPad: Single;
     function GetZoomedCellSizePx: Single; inline;
 
-    property ToolbarWidth: Integer read GetToolbarWidth;
     property ZoomedCellSizePX: Single read GetZoomedCellSizePx; // Cell size in pixels in current zoom
   public
     ScrollKeyLeft, ScrollKeyRight, ScrollKeyUp, ScrollKeyDown, ZoomKeyIn, ZoomKeyOut: Boolean;
     constructor Create(aToolBarWidth: Integer; aWidth, aHeight: Integer; aOnPositionSet: TPointFEvent);
+
+    property ToolbarWidth: Integer read GetToolbarWidth write fToolbarWidth;
+
 
     property Position: TKMPointF read GetPosition write SetPosition;
     property Scrolling: Boolean read fScrolling;

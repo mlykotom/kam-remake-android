@@ -72,11 +72,20 @@ class KaMActivity : Activity() {
         val extraScale = intent.getFloatExtra(PREF_UI_SCALE, -1f)
         if (extraScale in 0.5f..2.0f) prefs.edit().putFloat(PREF_UI_SCALE, extraScale).apply()
         val uiScale = prefs.getFloat(PREF_UI_SCALE, 1.0f)
+        val extraCutoutLeft = intent.getIntExtra("cutout_left", -1)
+        val extraCutoutRight = intent.getIntExtra("cutout_right", -1)
         val kamView = KaMView(this, dataDir, uiScale)
+        if (extraCutoutLeft >= 0 || extraCutoutRight >= 0) {
+            kamView.setCutoutInsets(maxOf(0, extraCutoutLeft), maxOf(0, extraCutoutRight))
+        }
         view = kamView
-        // Track the soft keyboard height to keep text fields visible above it
+        // Track the soft keyboard height and display cutout safe insets
         root.setOnApplyWindowInsetsListener { _, insets ->
             kamView.setImeHeight(insets.getInsets(WindowInsets.Type.ime()).bottom)
+            if (extraCutoutLeft < 0 && extraCutoutRight < 0) {
+                val cutout = insets.getInsets(WindowInsets.Type.displayCutout())
+                kamView.setCutoutInsets(cutout.left, cutout.right)
+            }
             insets
         }
         root.addView(

@@ -72,6 +72,8 @@ type
     procedure ResetHint;
 
     function GetToolbarWidth: Integer; virtual;
+    function GetSafeInsetLeft: Integer; virtual;
+    function GetSafeInsetRight: Integer; virtual;
   public
     constructor Create(aScreenX, aScreenY: Word);
     destructor Destroy; override;
@@ -157,7 +159,7 @@ begin
   fMyControls := TKMMasterControl.Create;
 
   // Parent Panel for the whole UI
-  Panel_Main := TKMPanel.Create(fMyControls, 0, 0, aScreenX, aScreenY);
+  Panel_Main := TKMPanel.Create(fMyControls, GetSafeInsetLeft, 0, Max(1, Integer(aScreenX) - GetSafeInsetLeft - GetSafeInsetRight), aScreenY);
 end;
 
 
@@ -389,7 +391,8 @@ end;
 
 procedure TKMUserInterfaceCommon.Resize(X, Y: Word);
 begin
-  Panel_Main.Width := X;
+  Panel_Main.Left := GetSafeInsetLeft;
+  Panel_Main.Width := Max(1, Integer(X) - GetSafeInsetLeft - GetSafeInsetRight);
   Panel_Main.Height := Y;
 end;
 
@@ -523,6 +526,18 @@ begin
 end;
 
 
+function TKMUserInterfaceCommon.GetSafeInsetLeft: Integer;
+begin
+  Result := 0;
+end;
+
+
+function TKMUserInterfaceCommon.GetSafeInsetRight: Integer;
+begin
+  Result := 0;
+end;
+
+
 procedure TKMUserInterfaceCommon.PaintHint;
 const
   PAD = 8;
@@ -595,7 +610,8 @@ begin
                       Bevel_HintBG.Width := Label_Hint.TextSize.X + PAD;
                       Bevel_HintBG.Height := Label_Hint.TextSize.Y + PAD;
                       Bevel_HintBG.AbsLeft := EnsureRange(fHintCtrl.AbsLeft + fHintCtrl.Width div 2 - Bevel_HintBG.Width div 2,
-                                                          MARGIN, Panel_Main.Width - Bevel_HintBG.Width - MARGIN);
+                                                          Panel_Main.AbsLeft + MARGIN, Panel_Main.AbsRight - Bevel_HintBG.Width - MARGIN);
+
                       Bevel_HintBG.AbsTop := fHintCtrl.AbsTop - Bevel_HintBG.Height - FONT_Y_FIX;
 
                       if Bevel_HintBG.AbsTop <= 0 then
