@@ -75,6 +75,7 @@ type
 
     procedure Create_Controls;
     procedure Create_Replay;
+    procedure Create_SpeedCtrl;
     procedure Create_ScriptingOverlay;
     procedure Create_Message;
     procedure Create_MessageLog;
@@ -139,6 +140,9 @@ type
     procedure MPPlayMoreClick(Sender: TObject);
     procedure NetWaitClick(Sender: TObject);
     procedure ReplayClick(Sender: TObject);
+    procedure SpeedCtrl_Click(Sender: TObject);
+    procedure PauseOverlay_Click(Sender: TObject);
+    procedure UpdateSpeedCtrlUI;
     procedure Replay_PlayersColorModeClick(Sender: TObject);
     function Replay_ListKeyUp(Sender: TObject; Key: Word; Shift: TShiftState): Boolean;
     procedure ReturnToLobbyClick(Sender: TObject);
@@ -245,6 +249,12 @@ type
       Checkbox_ReplayFOW: TKMCheckBox;
       Label_PlayersColorMode: TKMLabel;
       Radio_PlayersColorMode: TKMRadioGroup;
+    Panel_SpeedCtrl: TKMPanel;
+      Button_SpeedPause: TKMButton;
+      Button_Speed1: TKMButton;
+      Button_Speed2: TKMButton;
+      Button_Speed3: TKMButton;
+      Button_Speed4: TKMButton;
     Panel_Message: TKMPanel;
       Label_MessageText: TKMLabel;
       Button_MessageGoTo: TKMButton;
@@ -871,12 +881,15 @@ begin
   MinimapView.OnMinimapClick := Minimap_Click; // For placing beacons
 
   Image_Clock := TKMImage.Create(Panel_Main,232,8,67,65,556);
+  Image_Clock.HighlightOnMouseOver := True;
+  Image_Clock.OnClick := SpeedCtrl_Click;
   Image_Clock.Hide;
 
   Label_Time := TKMLabel.Create(Panel_Main,265,80,'mm:ss',fntOutline,taCenter);
   Label_Time.Hide;
 
   Label_ClockSpeedActual := TKMLabel.Create(Panel_Main,265,48,0,16,'x1',fntMetal,taCenter);
+  Label_ClockSpeedActual.Hitable := False;
   Label_ClockSpeedActual.Hide;
   if aUIMode = umReplay then
     Label_ClockSpeedActual.Hint := gResTexts[TX_GAME_UI_REPLAY_SPEED_ACTUAL]
@@ -885,6 +898,7 @@ begin
 
   Label_ClockSpeedRecorded := TKMLabel.Create(Panel_Main,265,65,0,16,'x1',fntGrey,taCenter);
   Label_ClockSpeedRecorded.Hint := gResTexts[TX_GAME_UI_SPEED_RECORDED];
+  Label_ClockSpeedRecorded.Hitable := False;
   Label_ClockSpeedRecorded.Hide;
 
   Create_ScriptingOverlay; // Scripting Overlay controls
@@ -911,6 +925,7 @@ begin
 
   Create_Pause;
   Create_Replay; // Replay controls
+  Create_SpeedCtrl;
   // Settings PopUpWindow above replay controls / chat / allies
   fGuiMenuOptions := TKMGUICommonGameOptions.Create(Panel_Controls, gResTexts[TX_MENU_SETTINGS_GAME], UpdateHotkeys);
   fGuiMenuOptions.GUICommonOptions.OnOptionsChange := GameOptionsChanged;
@@ -1038,6 +1053,7 @@ begin
   Label_Time.Left := tbW + 41;
   Label_ClockSpeedActual.Left := tbW + 41;
   Label_ClockSpeedRecorded.Left := tbW + 41;
+  UpdateSpeedCtrlUI;
 
   Panel_ReplayBar.Left := Max(320, tbW + 96);
   Panel_ReplayFOW.Left := Max(320, tbW + 96);
@@ -1127,9 +1143,13 @@ begin
   Label_Pause2 := TKMLabel.Create(Panel_Pause, (Panel_Main.Width div 2), (Panel_Main.Height div 2) + 20,
     Format(gResTexts[TX_GAMEPLAY_PAUSE_INFO], ['"P"']), fntGrey, taCenter);
   Bevel_Pause.AnchorsStretch; // Anchor to all sides
+  Bevel_Pause.OnClick := PauseOverlay_Click;
   Image_Pause.ImageCenter;
+  Image_Pause.OnClick := PauseOverlay_Click;
   Label_Pause1.AnchorsCenter;
+  Label_Pause1.Hitable := False;
   Label_Pause2.AnchorsCenter;
+  Label_Pause2.Hitable := False;
   Image_Pause.AnchorsCenter;
   Panel_Pause.Hide;
 
@@ -1338,6 +1358,122 @@ begin
 
     Button_ReplayStep.Disable; // Initial state
     Button_ReplayResume.Disable; // Initial state
+end;
+
+
+procedure TKMGamePlayInterface.Create_SpeedCtrl;
+begin
+  Panel_SpeedCtrl := TKMPanel.Create(Panel_Main, 305, 10, 206, 28);
+    Button_SpeedPause := TKMButton.Create(Panel_SpeedCtrl,   0, 0, 34, 28, 583, rxGui, bsGame);
+    Button_Speed1     := TKMButton.Create(Panel_SpeedCtrl,  38, 0, 38, 28, 'x1', bsGame);
+    Button_Speed2     := TKMButton.Create(Panel_SpeedCtrl,  80, 0, 38, 28, 'x3', bsGame);
+    Button_Speed3     := TKMButton.Create(Panel_SpeedCtrl, 122, 0, 38, 28, 'x6', bsGame);
+    Button_Speed4     := TKMButton.Create(Panel_SpeedCtrl, 164, 0, 42, 28, 'x10', bsGame);
+
+    Button_SpeedPause.OnClick := SpeedCtrl_Click;
+    Button_Speed1.OnClick     := SpeedCtrl_Click;
+    Button_Speed2.OnClick     := SpeedCtrl_Click;
+    Button_Speed3.OnClick     := SpeedCtrl_Click;
+    Button_Speed4.OnClick     := SpeedCtrl_Click;
+end;
+
+
+procedure TKMGamePlayInterface.PauseOverlay_Click(Sender: TObject);
+begin
+  HandlePauseKey(gResKeys[kfPause]);
+  UpdateSpeedCtrlUI;
+end;
+
+
+procedure TKMGamePlayInterface.SpeedCtrl_Click(Sender: TObject);
+begin
+  if Sender = Button_SpeedPause then
+  begin
+    HandlePauseKey(gResKeys[kfPause]);
+    UpdateSpeedCtrlUI;
+    Exit;
+  end;
+
+  if (fUIMode in [umSP, umReplay]) or SpeedChangeAllowedInMP then
+  begin
+    if gGame.IsPaused then
+      HandlePauseKey(gResKeys[kfPause]);
+
+    if Sender = Button_Speed1 then
+      gGame.SetSpeed(GAME_SPEED_NORMAL, True, gGame.GetToggledNormalSpeed)
+    else if Sender = Button_Speed2 then
+      gGame.SetSpeed(gGameSettings.SpeedMedium, True)
+    else if Sender = Button_Speed3 then
+      gGame.SetSpeed(gGameSettings.SpeedFast, True)
+    else if Sender = Button_Speed4 then
+      gGame.SetSpeed(gGameSettings.SpeedVeryFast, True)
+    else if Sender = Image_Clock then
+    begin
+      if gGame.SpeedActual < gGameSettings.SpeedMedium - 0.01 then
+        gGame.SetSpeed(gGameSettings.SpeedMedium, False)
+      else if gGame.SpeedActual < gGameSettings.SpeedFast - 0.01 then
+        gGame.SetSpeed(gGameSettings.SpeedFast, False)
+      else if gGame.SpeedActual < gGameSettings.SpeedVeryFast - 0.01 then
+        gGame.SetSpeed(gGameSettings.SpeedVeryFast, False)
+      else
+        gGame.SetSpeed(gGame.GetNormalSpeed, False);
+    end;
+    UpdateSpeedCtrlUI;
+  end
+  else if (fUIMode in [umMP, umSpectate]) and not SpeedChangeAllowedInMP then
+  begin
+    gNetworking.PostLocalMessage(gResTexts[TX_GAME_CHANGE_IS_NOT_ALLOWED_MSG]);
+    gSoundPlayer.Play(sfxCantPlace);
+  end;
+end;
+
+
+procedure TKMGamePlayInterface.UpdateSpeedCtrlUI;
+var
+  canChangeSpeed, allowSpeedStep, isPaused: Boolean;
+  spdActual, spdNorm, spdMed, spdFast, spdVeryFast: Single;
+begin
+  if (Self = nil) or (Panel_SpeedCtrl = nil) or (gGame = nil) then Exit;
+
+  if Panel_ReplayFOW.Visible then
+  begin
+    Panel_SpeedCtrl.Left := Image_Clock.Left;
+    Panel_SpeedCtrl.Top := 100;
+  end
+  else
+  begin
+    Panel_SpeedCtrl.Left := Image_Clock.Left + Image_Clock.Width + 6;
+    Panel_SpeedCtrl.Top := 10;
+  end;
+
+  canChangeSpeed := (fUIMode in [umSP, umReplay]) or SpeedChangeAllowedInMP;
+  allowSpeedStep := canChangeSpeed and (gGameParams.IsReplay or gGame.SpeedChangeAllowed);
+  isPaused := gGame.IsPaused;
+
+  spdActual := gGame.SpeedActual;
+  spdNorm := gGame.GetNormalSpeed;
+  spdMed := gGameSettings.SpeedMedium;
+  spdFast := gGameSettings.SpeedFast;
+  spdVeryFast := gGameSettings.SpeedVeryFast;
+
+  Button_SpeedPause.TexID := IfThen(isPaused, 585, 583);
+  Button_SpeedPause.Hint := IfThen(isPaused, gResTexts[TX_REPLAY_RESUME], gResTexts[TX_REPLAY_PAUSE]);
+
+  Button_Speed1.Caption := 'x' + FormatFloat('##0.##', spdNorm);
+  Button_Speed2.Caption := 'x' + FormatFloat('##0.##', spdMed);
+  Button_Speed3.Caption := 'x' + FormatFloat('##0.##', spdFast);
+  Button_Speed4.Caption := 'x' + FormatFloat('##0.##', spdVeryFast);
+
+  Button_SpeedPause.Enabled := canChangeSpeed;
+  Button_Speed1.Enabled := allowSpeedStep;
+  Button_Speed2.Enabled := allowSpeedStep;
+  Button_Speed3.Enabled := allowSpeedStep;
+  Button_Speed4.Enabled := allowSpeedStep;
+
+  Button_Speed1.CapColor := IfThen(not isPaused and SameValue(spdActual, spdNorm, 0.01), icRoyalYellow, icWhite);
+  Button_Speed2.CapColor := IfThen(not isPaused and SameValue(spdActual, spdMed, 0.01), icRoyalYellow, icWhite);
+  Button_Speed3.CapColor := IfThen(not isPaused and SameValue(spdActual, spdFast, 0.01), icRoyalYellow, icWhite);
+  Button_Speed4.CapColor := IfThen(not isPaused and SameValue(spdActual, spdVeryFast, 0.01), icRoyalYellow, icWhite);
 end;
 
 
@@ -1918,6 +2054,7 @@ begin
   Button_ReplayPause.Enabled := not showAsPaused;
   Button_ReplayStep.Enabled := showAsPaused;
   Button_ReplayResume.Enabled := showAsPaused;
+  UpdateSpeedCtrlUI;
 end;
 
 
@@ -2646,7 +2783,8 @@ begin
   if Self = nil then Exit;
 
   doShowRecorded := gGameParams.IsReplay;
-  doShowClock := gGameSettings.ShowGameSpeed
+  doShowClock := {$IFDEF ANDROID} True or {$ENDIF}
+                 gGameSettings.ShowGameSpeed
               or gGameParams.IsReplay
               or (aSpeedActual <> aDefaultSpeed)
               or (doShowRecorded and (aSpeedRecorded <> aDefaultSpeed));
@@ -2673,6 +2811,8 @@ begin
   // Thats why we refresh Clock.Caption here
   if doShowClock then
     Label_Time.Caption := TimeToString(gGame.MissionTime);
+
+  UpdateSpeedCtrlUI;
 end;
 
 
@@ -2879,6 +3019,9 @@ begin
     overlayTop := Panel_ReplayFOW.Top + Panel_ReplayFOW.Height - 5;
 
   overlayTop := Max(overlayTop, IfThen(Label_Time.Visible, 20, 0) + IfThen(Image_Clock.Visible, Image_Clock.Bottom, 0) + 5);
+  if (Panel_SpeedCtrl <> nil) and Panel_SpeedCtrl.Visible then
+    overlayTop := Max(overlayTop, Panel_SpeedCtrl.Top + Panel_SpeedCtrl.Height + 5);
+
 
   Label_ScriptedOverlay.Top := overlayTop + 19;
   Button_ScriptedOverlay.Top := overlayTop + 1;
@@ -4402,10 +4545,16 @@ begin
 
   // Update speedup clocks
   if Image_Clock.Visible then
-    Image_Clock.TexID := ((Image_Clock.TexID - 556) + 1) mod 16 + 556;
+    if not SameValue(gGame.SpeedActual, gGame.GetNormalSpeed, 0.01) then
+      Image_Clock.TexID := ((Image_Clock.TexID - 556) + 1) mod 16 + 556
+    else
+      Image_Clock.TexID := 556;
 
   if Label_Time.Visible then
     Label_Time.Caption := TimeToString(gGame.MissionTime);
+
+  UpdateSpeedCtrlUI;
+
 
   // Keep on updating these menu pages as game data keeps on changing
   if fGuiGameBuild.Visible then
