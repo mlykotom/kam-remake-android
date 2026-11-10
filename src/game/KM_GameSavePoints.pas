@@ -294,7 +294,7 @@ begin
     {$IFNDEF FPC}
     TArray.Sort<Cardinal>(keyArray);
     {$ELSE}
-    SortCustom(keyArray, Low(keyArray), High(keyArray), SizeOf(keyArray[0]), CompareKeys);
+    if Length(keyArray) > 1 then SortCustom(keyArray[0], Low(keyArray), High(keyArray), SizeOf(keyArray[0]), CompareKeys);
     {$ENDIF}
 
     //todo -cComplicated: potential OutOfMemory error in this cycle?
