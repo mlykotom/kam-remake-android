@@ -358,7 +358,7 @@ type
 
 const
   // This const is used in the inline method, thus it should be placed in the interface section
-  NOT_REACHABLE_DEST_VALUE = MaxSingle;
+  NOT_REACHABLE_DEST_VALUE = Single(MaxSingle);
 
 
 implementation

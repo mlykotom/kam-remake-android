@@ -11,7 +11,7 @@ uses
 
 
 const
-  FLOAT_PARAM_NONE = MaxSingle;
+  FLOAT_PARAM_NONE = Single(MaxSingle);
 
 type
   TKMScriptEntity = class
