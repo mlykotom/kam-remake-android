@@ -338,7 +338,7 @@ begin
 
   keyArray := fSoundRemoveRequests.Keys.ToArray;
   {$IFDEF FPC}
-  SortCustom(keyArray, Low(keyArray), High(keyArray), SizeOf(keyArray[0]), CompareKeys);
+  if Length(keyArray) > 1 then SortCustom(keyArray[0], Low(keyArray), High(keyArray), SizeOf(keyArray[0]), CompareKeys);
   {$ELSE}
   TArray.Sort<Integer>(keyArray);
   {$ENDIF}

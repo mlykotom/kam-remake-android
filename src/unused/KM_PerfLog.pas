@@ -267,7 +267,7 @@ begin
   {$IFNDEF FPC}
   TArray.Sort<Cardinal>(TicksArray);
   {$ELSE}
-  SortCustom(TicksArray, Low(TicksArray), High(TicksArray), SizeOf(TicksArray[0]), CompareTicks);
+  if Length(TicksArray) > 1 then SortCustom(TicksArray[0], Low(TicksArray), High(TicksArray), SizeOf(TicksArray[0]), CompareTicks);
   {$ENDIF}
 
 //  Str := 'Tick   '; //7
@@ -293,7 +293,7 @@ begin
     {$IFNDEF FPC}
     TArray.Sort<TKMPerfSection>(SectsArray);
     {$ELSE}
-    SortCustom(SectsArray, Low(SectsArray), High(SectsArray), SizeOf(SectsArray[0]), CompareSects);
+    if Length(SectsArray) > 1 then SortCustom(SectsArray[0], Low(SectsArray), High(SectsArray), SizeOf(SectsArray[0]), CompareSects);
     {$ENDIF}
 
     FastTick := False;
