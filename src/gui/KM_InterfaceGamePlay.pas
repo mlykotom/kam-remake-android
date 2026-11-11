@@ -67,6 +67,8 @@ type
     fGroupsTeamNames: TList<TKMUnitGroup>;
     fHousesTeamNames: TList<TKMHouse>;
     fLastKbdSelectionTime: Cardinal; //Last we select object from keyboard
+    fTouchBuildDragOffset: TKMPoint;
+    fLastTouchHouseTag: Word;
 
     // Saved (in singleplayer only)
     fLastSaveName: UnicodeString; // The file name we last used to save this file (used as default in Save menu)
@@ -74,6 +76,7 @@ type
     fSelection: array [0..SELECTION_HOTKEY_COUNT - 1] of Integer;
 
     procedure Create_Controls;
+    procedure Create_TouchBuildConfirm;
     procedure Create_Replay;
     procedure Create_SpeedCtrl;
     procedure Create_ScriptingOverlay;
@@ -143,6 +146,11 @@ type
     procedure SpeedCtrl_Click(Sender: TObject);
     procedure PauseOverlay_Click(Sender: TObject);
     procedure UpdateSpeedCtrlUI;
+    procedure TouchBuildConfirm_Click(Sender: TObject);
+    function ScreenToMapCell(X, Y: Integer): TKMPoint;
+    function GetHouseFootprintScreenRect(const aLoc: TKMPoint; aHouseType: TKMHouseType): TKMRect;
+    function IsPreviewCellInViewport(const aLoc: TKMPoint; aHouseType: TKMHouseType): Boolean;
+    procedure SpawnTouchHousePreviewAtCenter(aHouseType: TKMHouseType);
     procedure Replay_PlayersColorModeClick(Sender: TObject);
     function Replay_ListKeyUp(Sender: TObject; Key: Word; Shift: TShiftState): Boolean;
     procedure ReturnToLobbyClick(Sender: TObject);
@@ -255,6 +263,11 @@ type
       Button_Speed2: TKMButton;
       Button_Speed3: TKMButton;
       Button_Speed4: TKMButton;
+    Panel_BuildConfirm: TKMPanel;
+      Button_BuildCancel: TKMButton;
+      Image_BuildCancel: TKMImage;
+      Button_BuildConfirm: TKMButton;
+      Image_BuildConfirm: TKMImage;
     Panel_Message: TKMPanel;
       Label_MessageText: TKMLabel;
       Button_MessageGoTo: TKMButton;
@@ -393,6 +406,12 @@ type
     procedure ScrollSidebar(aDelta: Integer);
     function IsOverScrollableSidebar(X, Y: Integer): Boolean;
     function IsFullScreenPageVisible: Boolean;
+    procedure UpdateTouchBuildUI;
+    function IsTouchHousePlacement: Boolean;
+    function TouchHousePreviewHit(X, Y: Integer): Boolean;
+    procedure TouchHouseDragStart(X, Y: Integer);
+    procedure TouchHouseDragMove(X, Y: Integer);
+    function TouchHouseTap(X, Y: Integer): Boolean;
     property SidebarScrollMax: Integer read fSidebarScrollMax;
     procedure SyncUI(aMoveViewport: Boolean = True); override;
     procedure UpdateHotkeys; override;
@@ -419,7 +438,7 @@ uses
   KM_GameParams,
   KM_Video, KM_Music, KM_Sound, KM_ScriptSound,
   KM_HandEntityHelper,
-  KM_Utils, KM_MapUtils;
+  KM_Platform, KM_Utils, KM_MapUtils;
 
 const
   PANEL_TRACK_TOP = 285;
@@ -912,6 +931,7 @@ begin
 { I plan to store all possible layouts on different pages which gets displayed one at a time }
 { ========================================================================================== }
   Create_Controls; // Includes all the child pages
+  Create_TouchBuildConfirm;
 
   Create_NetWait; // Overlay blocking everyhitng but sidestack and messages
   fGuiGameAllies := TKMGUIGameAllies.Create(Panel_Main); // MessagePage sibling
@@ -1474,6 +1494,339 @@ begin
   Button_Speed2.CapColor := IfThen(not isPaused and SameValue(spdActual, spdMed, 0.01), icRoyalYellow, icWhite);
   Button_Speed3.CapColor := IfThen(not isPaused and SameValue(spdActual, spdFast, 0.01), icRoyalYellow, icWhite);
   Button_Speed4.CapColor := IfThen(not isPaused and SameValue(spdActual, spdVeryFast, 0.01), icRoyalYellow, icWhite);
+end;
+
+
+const
+  TOUCH_BUILD_BTN_W = 58;
+  TOUCH_BUILD_BTN_H = 48;
+  TOUCH_BUILD_BTN_GAP = 12;
+  TOUCH_BUILD_ICON_SZ = 26;
+
+procedure TKMGamePlayInterface.Create_TouchBuildConfirm;
+begin
+  Panel_BuildConfirm := TKMPanel.Create(Panel_Main, 0, 0, TOUCH_BUILD_BTN_W * 2 + TOUCH_BUILD_BTN_GAP, TOUCH_BUILD_BTN_H);
+  Panel_BuildConfirm.Hitable := False;
+
+    Button_BuildCancel := TKMButton.Create(Panel_BuildConfirm, 0, 0, TOUCH_BUILD_BTN_W, TOUCH_BUILD_BTN_H, '', bsGame);
+    Button_BuildCancel.OnClick := TouchBuildConfirm_Click;
+    Image_BuildCancel := TKMImage.Create(Panel_BuildConfirm, (TOUCH_BUILD_BTN_W - TOUCH_BUILD_ICON_SZ) div 2, (TOUCH_BUILD_BTN_H - TOUCH_BUILD_ICON_SZ) div 2, TOUCH_BUILD_ICON_SZ, TOUCH_BUILD_ICON_SZ, 32, rxGuiMain);
+    Image_BuildCancel.ImageStretch;
+    Image_BuildCancel.Hitable := False;
+
+    Button_BuildConfirm := TKMButton.Create(Panel_BuildConfirm, TOUCH_BUILD_BTN_W + TOUCH_BUILD_BTN_GAP, 0, TOUCH_BUILD_BTN_W, TOUCH_BUILD_BTN_H, '', bsGame);
+    Button_BuildConfirm.OnClick := TouchBuildConfirm_Click;
+    Image_BuildConfirm := TKMImage.Create(Panel_BuildConfirm, TOUCH_BUILD_BTN_W + TOUCH_BUILD_BTN_GAP + (TOUCH_BUILD_BTN_W - TOUCH_BUILD_ICON_SZ) div 2, (TOUCH_BUILD_BTN_H - TOUCH_BUILD_ICON_SZ) div 2, TOUCH_BUILD_ICON_SZ, TOUCH_BUILD_ICON_SZ, 33, rxGuiMain);
+    Image_BuildConfirm.ImageStretch;
+    Image_BuildConfirm.Hitable := False;
+
+  Panel_BuildConfirm.Hide;
+end;
+
+
+function TKMGamePlayInterface.IsTouchHousePlacement: Boolean;
+begin
+  Result := PlatformIsTouchMode
+            and (gCursor <> nil)
+            and (gCursor.Mode = cmHouses)
+            and (gMySpectator <> nil)
+            and (gMySpectator.Hand <> nil)
+            and not gMySpectator.Hand.InCinematic
+            and not ((gGame <> nil) and gGame.IsPaused and (fUIMode in [umSP, umMP]) and not DBG_LIVE_GAME_ON_PAUSE)
+            and not IsFullScreenPageVisible;
+end;
+
+
+function TKMGamePlayInterface.ScreenToMapCell(X, Y: Integer): TKMPoint;
+var
+  F: TKMPointF;
+begin
+  F := CursorToMapCoord(X, Y);
+  Result.X := EnsureRange(Round(F.X + 0.5), 1, gTerrain.MapX - 1);
+  Result.Y := EnsureRange(Round(F.Y + 0.5), 1, gTerrain.MapY - 1);
+end;
+
+
+function TKMGamePlayInterface.GetHouseFootprintScreenRect(const aLoc: TKMPoint; aHouseType: TKMHouseType): TKMRect;
+var
+  HA: TKMHouseArea;
+  enterOff: ShortInt;
+  I, K, tx, ty: Integer;
+  minTX, maxTX, minTY, maxTY: Integer;
+  corners: array [0..3] of TKMPointF;
+  pt: TKMPoint;
+begin
+  minTX := aLoc.X;
+  maxTX := aLoc.X;
+  minTY := aLoc.Y;
+  maxTY := aLoc.Y + 1;
+
+  if aHouseType <> htNone then
+  begin
+    HA := gRes.Houses[aHouseType].BuildArea;
+    enterOff := gRes.Houses[aHouseType].EntranceOffsetX;
+    for I := 1 to 4 do
+      for K := 1 to 4 do
+        if HA[I, K] <> 0 then
+        begin
+          tx := aLoc.X - enterOff + K - 3;
+          ty := aLoc.Y + I - 4;
+          if tx < minTX then minTX := tx;
+          if tx > maxTX then maxTX := tx;
+          if ty < minTY then minTY := ty;
+          if ty > maxTY then maxTY := ty;
+        end;
+  end;
+
+  minTX := EnsureRange(minTX, 1, gTerrain.MapX - 1);
+  maxTX := EnsureRange(maxTX, 1, gTerrain.MapX - 1);
+  minTY := EnsureRange(minTY, 1, gTerrain.MapY - 1);
+  maxTY := EnsureRange(maxTY, 1, gTerrain.MapY - 1);
+
+  corners[0] := gTerrain.FlatToHeight(KMPointF(minTX - 1, minTY - 1));
+  corners[1] := gTerrain.FlatToHeight(KMPointF(maxTX,     minTY - 1));
+  corners[2] := gTerrain.FlatToHeight(KMPointF(minTX - 1, maxTY));
+  corners[3] := gTerrain.FlatToHeight(KMPointF(maxTX,     maxTY));
+
+  pt := fViewport.MapToScreen(corners[0]);
+  Result := KMRect(pt.X, pt.Y, pt.X, pt.Y);
+  for I := 1 to 3 do
+  begin
+    pt := fViewport.MapToScreen(corners[I]);
+    if pt.X < Result.Left   then Result.Left   := pt.X;
+    if pt.X > Result.Right  then Result.Right  := pt.X;
+    if pt.Y < Result.Top    then Result.Top    := pt.Y;
+    if pt.Y > Result.Bottom then Result.Bottom := pt.Y;
+  end;
+end;
+
+
+function TKMGamePlayInterface.IsPreviewCellInViewport(const aLoc: TKMPoint; aHouseType: TKMHouseType): Boolean;
+var
+  R: TKMRect;
+  midX, midY: Integer;
+begin
+  R := GetHouseFootprintScreenRect(aLoc, aHouseType);
+  midX := (R.Left + R.Right) div 2;
+  midY := (R.Top + R.Bottom) div 2;
+  Result := (midX >= fViewport.ToolbarWidth)
+            and (midX <= fViewport.ViewRect.Right - GetSafeInsetRight)
+            and (midY >= fViewport.ViewRect.Top)
+            and (midY <= fViewport.ViewRect.Bottom);
+end;
+
+
+procedure TKMGamePlayInterface.SpawnTouchHousePreviewAtCenter(aHouseType: TKMHouseType);
+var
+  centerX, centerY: Integer;
+  cell: TKMPoint;
+begin
+  centerX := (fViewport.ToolbarWidth + fViewport.ViewRect.Right - GetSafeInsetRight) div 2;
+  centerY := fViewport.ViewRect.Bottom div 2;
+  cell := ScreenToMapCell(centerX, centerY);
+  cell.Y := EnsureRange(cell.Y + 1, 1, gTerrain.MapY - 1);
+  gCursor.PreviewCell := cell;
+  gCursor.HasPreviewCell := True;
+end;
+
+
+function TKMGamePlayInterface.TouchHousePreviewHit(X, Y: Integer): Boolean;
+const
+  TOUCH_PAD = 24;
+var
+  R: TKMRect;
+begin
+  if not IsTouchHousePlacement or not gCursor.HasPreviewCell then
+    Exit(False);
+  if (Panel_BuildConfirm <> nil) and Panel_BuildConfirm.Visible
+     and (X >= Panel_BuildConfirm.AbsLeft) and (X <= Panel_BuildConfirm.AbsRight)
+     and (Y >= Panel_BuildConfirm.AbsTop) and (Y <= Panel_BuildConfirm.AbsBottom) then
+    Exit(False);
+  R := GetHouseFootprintScreenRect(gCursor.PreviewCell, TKMHouseType(gCursor.Tag1));
+  Result := (X >= R.Left - TOUCH_PAD) and (X <= R.Right + TOUCH_PAD)
+            and (Y >= R.Top - TOUCH_PAD) and (Y <= R.Bottom + TOUCH_PAD);
+end;
+
+
+procedure TKMGamePlayInterface.TouchHouseDragStart(X, Y: Integer);
+var
+  cell: TKMPoint;
+begin
+  if not gCursor.HasPreviewCell then
+    SpawnTouchHousePreviewAtCenter(TKMHouseType(gCursor.Tag1));
+  cell := ScreenToMapCell(X, Y);
+  fTouchBuildDragOffset := KMPoint(gCursor.PreviewCell.X - cell.X, gCursor.PreviewCell.Y - cell.Y);
+end;
+
+
+procedure TKMGamePlayInterface.TouchHouseDragMove(X, Y: Integer);
+var
+  cell, nextCell: TKMPoint;
+begin
+  if not IsTouchHousePlacement then Exit;
+  cell := ScreenToMapCell(X, Y);
+  nextCell := KMPointAdd(cell, fTouchBuildDragOffset);
+  nextCell.X := EnsureRange(nextCell.X, 1, gTerrain.MapX - 1);
+  nextCell.Y := EnsureRange(nextCell.Y, 1, gTerrain.MapY - 1);
+  gCursor.PreviewCell := nextCell;
+  gCursor.HasPreviewCell := True;
+  UpdateTouchBuildUI;
+end;
+
+
+function TKMGamePlayInterface.TouchHouseTap(X, Y: Integer): Boolean;
+const
+  CONFIRM_PAD = 20;
+var
+  cell: TKMPoint;
+begin
+  Result := False;
+  if not IsTouchHousePlacement then Exit;
+  if (Panel_BuildConfirm <> nil) and Panel_BuildConfirm.Visible
+     and (X >= Panel_BuildConfirm.AbsLeft - CONFIRM_PAD) and (X <= Panel_BuildConfirm.AbsRight + CONFIRM_PAD)
+     and (Y >= Panel_BuildConfirm.AbsTop - CONFIRM_PAD) and (Y <= Panel_BuildConfirm.AbsBottom + CONFIRM_PAD) then
+    Exit;
+  if TouchHousePreviewHit(X, Y) then Exit;
+  cell := ScreenToMapCell(X, Y);
+  if not gCursor.HasPreviewCell or not KMSamePoint(gCursor.PreviewCell, cell) then
+  begin
+    gCursor.PreviewCell := cell;
+    gCursor.HasPreviewCell := True;
+    UpdateTouchBuildUI;
+    Result := True;
+  end;
+end;
+
+
+procedure TKMGamePlayInterface.TouchBuildConfirm_Click(Sender: TObject);
+var
+  P: TKMPoint;
+  houseType: TKMHouseType;
+  fowOk: Boolean;
+begin
+  if gCursor.Mode <> cmHouses then Exit;
+
+  if Sender = Button_BuildCancel then
+  begin
+    if fGuiGameBuild.Visible then
+      fGuiGameBuild.ClearSelection
+    else
+      gCursor.Mode := cmNone;
+    UpdateTouchBuildUI;
+    Exit;
+  end;
+
+  if (Sender = Button_BuildConfirm) and not gGameParams.IsReplayOrSpectate then
+  begin
+    houseType := TKMHouseType(gCursor.Tag1);
+    if gCursor.HasPreviewCell then
+      P := gCursor.PreviewCell
+    else
+      P := gCursor.Cell;
+
+    fowOk := gMySpectator.Hand.NeedToChooseFirstStorehouseInGame
+             or (gMySpectator.FogOfWar.CheckTileRevelation(P.X, P.Y) > 0);
+
+    if fowOk and IsPreviewCellInViewport(P, houseType)
+       and gMySpectator.Hand.CanAddHousePlan(P, houseType) then
+    begin
+      gGame.GameInputProcess.CmdBuild(gicBuildHousePlan, P, houseType);
+      if not gMySpectator.Hand.NeedToChooseFirstStorehouseInGame then
+        fGuiGameBuild.Show
+      else
+        gCursor.Mode := cmNone;
+      UpdateTouchBuildUI;
+    end
+    else
+      gSoundPlayer.Play(sfxCantPlace, P, False, 4);
+  end;
+end;
+
+
+procedure TKMGamePlayInterface.UpdateTouchBuildUI;
+const
+  MARGIN = 12;
+var
+  houseType: TKMHouseType;
+  showCancel, showConfirm, canConfirm, fowOk: Boolean;
+  footRect: TKMRect;
+  panelW, panelLeft, panelTop, minLeft, maxLeft, minTop, maxTop: Integer;
+begin
+  if (Self = nil) or (Panel_BuildConfirm = nil) or (gGame = nil) then Exit;
+
+  if not IsTouchHousePlacement then
+  begin
+    Panel_BuildConfirm.Hide;
+    fLastTouchHouseTag := 0;
+    Exit;
+  end;
+
+  houseType := TKMHouseType(gCursor.Tag1);
+  if houseType = htNone then
+  begin
+    Panel_BuildConfirm.Hide;
+    Exit;
+  end;
+
+  if not gCursor.HasPreviewCell
+     or ((fLastTouchHouseTag <> gCursor.Tag1) and not IsPreviewCellInViewport(gCursor.PreviewCell, houseType)) then
+    SpawnTouchHousePreviewAtCenter(houseType);
+  fLastTouchHouseTag := gCursor.Tag1;
+
+  showCancel := not gMySpectator.Hand.NeedToChooseFirstStorehouseInGame;
+  showConfirm := not gGameParams.IsReplayOrSpectate;
+
+  Button_BuildCancel.Visible := showCancel;
+  Image_BuildCancel.Visible := showCancel;
+  Button_BuildConfirm.Visible := showConfirm;
+  Image_BuildConfirm.Visible := showConfirm;
+
+  if showCancel and showConfirm then
+    panelW := TOUCH_BUILD_BTN_W * 2 + TOUCH_BUILD_BTN_GAP
+  else
+    panelW := TOUCH_BUILD_BTN_W;
+  Panel_BuildConfirm.Width := panelW;
+
+  if showCancel and showConfirm then
+  begin
+    Button_BuildCancel.Left := 0;
+    Image_BuildCancel.Left := (TOUCH_BUILD_BTN_W - Image_BuildCancel.Width) div 2;
+    Button_BuildConfirm.Left := TOUCH_BUILD_BTN_W + TOUCH_BUILD_BTN_GAP;
+    Image_BuildConfirm.Left := TOUCH_BUILD_BTN_W + TOUCH_BUILD_BTN_GAP + (TOUCH_BUILD_BTN_W - Image_BuildConfirm.Width) div 2;
+  end
+  else
+  begin
+    Button_BuildCancel.Left := 0;
+    Image_BuildCancel.Left := (TOUCH_BUILD_BTN_W - Image_BuildCancel.Width) div 2;
+    Button_BuildConfirm.Left := 0;
+    Image_BuildConfirm.Left := (TOUCH_BUILD_BTN_W - Image_BuildConfirm.Width) div 2;
+  end;
+
+  if showConfirm then
+  begin
+    fowOk := gMySpectator.Hand.NeedToChooseFirstStorehouseInGame
+             or (gMySpectator.FogOfWar.CheckTileRevelation(gCursor.PreviewCell.X, gCursor.PreviewCell.Y) > 0);
+    canConfirm := fowOk
+                  and IsPreviewCellInViewport(gCursor.PreviewCell, houseType)
+                  and gMySpectator.Hand.CanAddHousePlan(gCursor.PreviewCell, houseType);
+    Button_BuildConfirm.MakesSound := canConfirm;
+    Image_BuildConfirm.Enabled := canConfirm;
+  end;
+
+  footRect := GetHouseFootprintScreenRect(gCursor.PreviewCell, houseType);
+  panelLeft := (footRect.Left + footRect.Right - panelW) div 2;
+  panelTop := footRect.Bottom + MARGIN;
+  if panelTop + TOUCH_BUILD_BTN_H > fViewport.ViewRect.Bottom - MARGIN then
+    panelTop := footRect.Top - TOUCH_BUILD_BTN_H - MARGIN;
+
+  minLeft := fViewport.ToolbarWidth + MARGIN;
+  maxLeft := Max(minLeft, fViewport.ViewRect.Right - GetSafeInsetRight - panelW - MARGIN);
+  minTop := 48;
+  maxTop := Max(minTop, fViewport.ViewRect.Bottom - TOUCH_BUILD_BTN_H - MARGIN);
+
+  Panel_BuildConfirm.Left := EnsureRange(panelLeft, minLeft, maxLeft);
+  Panel_BuildConfirm.Top := EnsureRange(panelTop, minTop, maxTop);
+  Panel_BuildConfirm.Show;
 end;
 
 
@@ -4268,6 +4621,7 @@ begin
             cmWine:  gCursor.Tag1 := Ord(cfmNone);
 
             cmHouses:
+              if not IsTouchHousePlacement then
               if gMySpectator.Hand.CanAddHousePlan(P, TKMHouseType(gCursor.Tag1)) then
               begin
                 gGame.GameInputProcess.CmdBuild(gicBuildHousePlan, P, TKMHouseType(gCursor.Tag1));
@@ -4638,6 +4992,7 @@ begin
                             not fDragScrolling
                             and not ((gGame.IsPaused or gGame.IsWaitingForNetwork) and IsKeyFuncBlockedOnPause(kfScrollUp)),
                             gMySpectator.Hand.InCinematic);
+  UpdateTouchBuildUI;
 end;
 
 
@@ -4783,6 +5138,8 @@ var
   mapLoc: TKMPointF;
   screenLoc: TKMPoint;
 begin
+  UpdateTouchBuildUI;
+
   if fShowTeamNames then
   begin
     Label_TeamName.Visible := True; // Only visible while we're using it, otherwise it shows up in other places

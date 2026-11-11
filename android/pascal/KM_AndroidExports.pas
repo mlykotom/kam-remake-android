@@ -5,7 +5,8 @@ unit KM_AndroidExports;
 // Touch input is translated here into the mouse events the original game UI expects:
 //  - tap on UI or map = left click
 //  - one finger drag on UI = left button drag (sliders, scrollbars, minimap)
-//  - one finger drag on map = scroll the map (or left button drag while a build/editor tool is active)
+//  - one finger drag on map = scroll the map (or left button drag while a road/field/editor tool is active;
+//    when placing a building in gameplay, dragging the footprint moves the preview while dragging elsewhere pans)
 //  - double tap (or long press) on map or right-clickable UI = right button press; keep holding and move to pick troop direction, release to finish
 //  - two finger tap = right click
 //  - pinch = zoom, two finger drag = scroll
@@ -77,7 +78,7 @@ const
 
 type
   TKMTouchState = (tsIdle, tsUIPending, tsUIDrag, tsMapPending, tsMapPan, tsMapDragLeft, tsRightHold, tsPinch, tsConsumed,
-                   tsSidebarPending, tsSidebarScroll);
+                   tsSidebarPending, tsSidebarScroll, tsHousePreviewPending, tsHousePreviewDrag);
 
 var
   gCallbacks: TKMHostCallbacks;
@@ -658,9 +659,35 @@ begin
 end;
 
 
+function ActiveGamePlay: TKMGamePlayInterface;
+begin
+  Result := nil;
+  if (gGame <> nil) and (gGameApp <> nil) and (gGame.GamePlayInterface <> nil)
+     and (gGameApp.ActiveInterface = gGame.GamePlayInterface) then
+    Result := gGame.GamePlayInterface;
+end;
+
+
+function TouchHouseModeActive: Boolean;
+var
+  gp: TKMGamePlayInterface;
+begin
+  gp := ActiveGamePlay;
+  Result := (gp <> nil) and gp.IsTouchHousePlacement;
+end;
+
+
+function GameplayBuildToolActive: Boolean;
+begin
+  Result := (ActiveGamePlay <> nil) and (gCursor <> nil)
+            and (gCursor.Mode in [cmErase, cmRoad, cmField, cmWine, cmHouses]);
+end;
+
+
 // Some cursor modes (roads, fields, map editor brushes) are applied by dragging with the left button
 function MapToolActive: Boolean;
 begin
+  if TouchHouseModeActive then Exit(False);
   Result := (gCursor <> nil) and (gCursor.Mode <> cmNone);
 end;
 
@@ -756,7 +783,8 @@ end;
 
 procedure CheckLongPress;
 begin
-  if ((fTouchState in [tsMapPending, tsUIPending])
+  if (((fTouchState = tsMapPending) and not GameplayBuildToolActive)
+      or (fTouchState = tsUIPending)
       or ((fTouchState = tsSidebarPending) and IsRightClickableUI(fDownPos)))
   and (GetTickCount64 - fDownTime >= LONG_PRESS_MS) then
   begin
@@ -795,6 +823,8 @@ var
   P0, P1, mid: TPointF;
 begin
   if (gGameApp = nil) or (gMain = nil) or not gMain.Started then Exit;
+  gHostTouchMode := True;
+  IGNORE_MOUSE_SCROLLING := True;
   try
     P0 := MakePointF(X0, Y0);
     P1 := MakePointF(X1, Y1);
@@ -842,13 +872,25 @@ begin
             end;
           end
           else
+          if TouchHouseModeActive then
+          begin
+            ActiveGamePlay.UpdateTouchBuildUI;
+            if ActiveGamePlay.TouchHousePreviewHit(Round(P0.X), Round(P0.Y)) then
+            begin
+              ActiveGamePlay.TouchHouseDragStart(Round(P0.X), Round(P0.Y));
+              fTouchState := tsHousePreviewPending;
+            end
+            else
+              fTouchState := tsMapPending;
+          end
+          else
             fTouchState := tsMapPending;
         end;
 
       TOUCH_POINTER_DOWN:
         if aPointerCount >= 2 then
           case fTouchState of
-            tsMapPending, tsMapPan, tsUIPending, tsSidebarPending:
+            tsMapPending, tsMapPan, tsUIPending, tsSidebarPending, tsHousePreviewPending, tsHousePreviewDrag:
               StartPinch(P0, P1);
             tsMapDragLeft, tsUIDrag:
               begin
@@ -899,6 +941,21 @@ begin
           tsUIDrag, tsMapDragLeft:
             begin
               SendMove(P0);
+              fLastPos := P0;
+            end;
+          tsHousePreviewPending:
+            if Dist(P0, fDownPos) > TAP_SLOP then
+            begin
+              HostHaptic;
+              if ActiveGamePlay <> nil then
+                ActiveGamePlay.TouchHouseDragMove(Round(P0.X), Round(P0.Y));
+              fTouchState := tsHousePreviewDrag;
+              fLastPos := P0;
+            end;
+          tsHousePreviewDrag:
+            begin
+              if ActiveGamePlay <> nil then
+                ActiveGamePlay.TouchHouseDragMove(Round(P0.X), Round(P0.Y));
               fLastPos := P0;
             end;
           tsRightHold:
@@ -976,13 +1033,34 @@ begin
               else
                 PerformLeftTap(fDownPos);
 
-            tsUIPending, tsMapPending:
+            tsUIPending:
               begin
                 // Defer left click briefly so a double-tap becomes a right click instead
                 fPendingTap := True;
                 fPendingTapPos := fDownPos;
                 fPendingTapTime := GetTickCount64;
               end;
+
+            tsMapPending:
+              if TouchHouseModeActive then
+              begin
+                if (ActiveGamePlay <> nil) and ActiveGamePlay.TouchHouseTap(Round(fDownPos.X), Round(fDownPos.Y)) then
+                  HostHaptic;
+              end
+              else
+              if GameplayBuildToolActive then
+                PerformLeftTap(fDownPos)
+              else
+              begin
+                // Defer left click briefly so a double-tap becomes a right click instead
+                fPendingTap := True;
+                fPendingTapPos := fDownPos;
+                fPendingTapTime := GetTickCount64;
+              end;
+
+            tsHousePreviewDrag:
+              if ActiveGamePlay <> nil then
+                ActiveGamePlay.TouchHouseDragMove(Round(P0.X), Round(P0.Y));
 
             tsUIDrag, tsMapDragLeft:
               begin
@@ -1026,6 +1104,7 @@ var
   btn: TMouseButton;
 begin
   if gGameApp = nil then Exit;
+  gHostTouchMode := False;
   IGNORE_MOUSE_SCROLLING := False;
   case aButton of
     1: btn := mbRight;

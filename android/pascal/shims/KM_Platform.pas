@@ -12,6 +12,7 @@ const
 
 function PlatformSafeInsetLeft: Integer; inline;
 function PlatformSafeInsetRight: Integer; inline;
+function PlatformIsTouchMode: Boolean; inline;
 function PlatformTimeGet: Cardinal;
 function PlatformTimeGetUsec: Int64;
 
@@ -50,6 +51,12 @@ end;
 function PlatformSafeInsetRight: Integer;
 begin
   Result := gHostSafeInsetRight;
+end;
+
+
+function PlatformIsTouchMode: Boolean;
+begin
+  Result := gHostTouchMode;
 end;
 
 

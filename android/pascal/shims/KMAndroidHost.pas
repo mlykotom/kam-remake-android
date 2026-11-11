@@ -25,6 +25,7 @@ var
   gHostSafeInsetLeft: Integer = 0;
   gHostSafeInsetRight: Integer = 0;
   gHostAppActive: Boolean = True;
+  gHostTouchMode: Boolean = True;
 
   // Debug switches read from <data>/dbg.txt (render bisecting on device)
   gAndroidDbgMask: Cardinal = 0;

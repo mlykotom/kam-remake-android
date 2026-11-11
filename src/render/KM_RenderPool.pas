@@ -1693,7 +1693,10 @@ begin
                     RenderWireTile(P, icCyan) // Cyan quad
                   else
                     RenderSpriteOnTile(P, TC_BLOCK);       // Red X
-    cmHouses:     RenderWireHousePlan(KMPointAdd(P, gCursor.DragOffset), TKMHouseType(gCursor.Tag1)); // Cyan quads and red Xs
+    cmHouses:     if gCursor.HasPreviewCell then
+                    RenderWireHousePlan(gCursor.PreviewCell, TKMHouseType(gCursor.Tag1))
+                  else
+                    RenderWireHousePlan(KMPointAdd(P, gCursor.DragOffset), TKMHouseType(gCursor.Tag1)); // Cyan quads and red Xs
     cmBrush:      RenderForegroundUI_Brush;
     cmTiles:      if gCursor.MapEdDir in [0..3] then
                     RenderTile(gCursor.Tag1, P.X, P.Y, gCursor.MapEdDir)
