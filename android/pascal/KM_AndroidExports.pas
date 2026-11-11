@@ -756,8 +756,12 @@ begin
     prevSelected := gMySpectator.Selected;
   SendDown(mbLeft, P);
   SendUp(mbLeft, P);
+  // Remember taps on text fields: the host shows the soft keyboard only then
+  if (ActiveControls <> nil) and (ActiveControls.HitControl(Round(P.X), Round(P.Y)) is TKMSelectableEdit) then
+    fTextFieldTapped := True;
   if not isAction and (gMySpectator <> nil) and (gMySpectator.Selected <> prevSelected) then
     isAction := True;
+
   if isAction then
     HostHaptic;
 end;

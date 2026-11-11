@@ -506,9 +506,10 @@ var
   begin
     Result := False; //By default everything remains in place
     case fSortMethod of
-      smByFileNameAsc:     Result := CompareText(A.FileName, B.FileName) < 0;
-      smByFileNameDesc:    Result := CompareText(A.FileName, B.FileName) > 0;
+      smByFileNameAsc:     Result := CompareTextLogical(A.FileName, B.FileName) < 0;
+      smByFileNameDesc:    Result := CompareTextLogical(A.FileName, B.FileName) > 0;
       smByMapNameAsc:      Result := CompareTextLogical(A.GameInfo.Title, B.GameInfo.Title) < 0;
+
       smByMapNameDesc:     Result := CompareTextLogical(A.GameInfo.Title, B.GameInfo.Title) > 0;
       smByGameVersionAsc:  Result := GetGameVersionNum(A.GameInfo.Version) < GetGameVersionNum(B.GameInfo.Version);
       smByGameVersionDesc: Result := GetGameVersionNum(A.GameInfo.Version) > GetGameVersionNum(B.GameInfo.Version);

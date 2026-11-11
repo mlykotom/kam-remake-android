@@ -317,14 +317,77 @@ function StrCmpLogicalW(psz1, psz2: PWideChar): Integer; stdcall; external 'shlw
 
 
 function CompareTextLogical(A, B: UnicodeString): Integer;
+{$IFNDEF MSWindows}
+var
+  iA, iB, lenA, lenB, nzA, nzB, digLenA, digLenB, k: Integer;
+  cA, cB: WideChar;
+
+  function IsDigitW(aCh: WideChar): Boolean;
+  begin
+    Result := (Ord(aCh) >= Ord('0')) and (Ord(aCh) <= Ord('9'));
+  end;
+
+  function UpperW(aCh: WideChar): WideChar;
+  begin
+    if (Ord(aCh) >= Ord('a')) and (Ord(aCh) <= Ord('z')) then
+      Result := WideChar(Ord(aCh) - 32)
+    else
+      Result := aCh;
+  end;
+{$ENDIF}
 begin
   {$IFDEF MSWindows}
   Result := StrCmpLogicalW(PWideChar(A), PWideChar(B));
   {$ELSE}
-  Result := CompareText(A, B);
+  lenA := Length(A);
+  lenB := Length(B);
+  iA := 1;
+  iB := 1;
+  while (iA <= lenA) and (iB <= lenB) do
+  begin
+    cA := A[iA];
+    cB := B[iB];
+    if IsDigitW(cA) and IsDigitW(cB) then
+    begin
+      nzA := iA;
+      while (nzA <= lenA) and (A[nzA] = '0') do Inc(nzA);
+      digLenA := nzA;
+      while (digLenA <= lenA) and IsDigitW(A[digLenA]) do Inc(digLenA);
+
+      nzB := iB;
+      while (nzB <= lenB) and (B[nzB] = '0') do Inc(nzB);
+      digLenB := nzB;
+      while (digLenB <= lenB) and IsDigitW(B[digLenB]) do Inc(digLenB);
+
+      if (digLenA - nzA) <> (digLenB - nzB) then
+        Exit((digLenA - nzA) - (digLenB - nzB));
+
+      for k := 0 to (digLenA - nzA) - 1 do
+        if A[nzA + k] <> B[nzB + k] then
+          Exit(Ord(A[nzA + k]) - Ord(B[nzB + k]));
+
+      // Same numeric value: fewer leading zeros comes first if tie
+      if (nzA - iA) <> (nzB - iB) then
+        Exit((nzA - iA) - (nzB - iB));
+
+      iA := digLenA;
+      iB := digLenB;
+    end
+    else
+    begin
+      cA := UpperW(cA);
+      cB := UpperW(cB);
+      if cA <> cB then
+        Exit(Ord(cA) - Ord(cB));
+      Inc(iA);
+      Inc(iB);
+    end;
+  end;
+  Result := (lenA - iA) - (lenB - iB);
   {$ENDIF}
 end;
 
 
 end.
+
 

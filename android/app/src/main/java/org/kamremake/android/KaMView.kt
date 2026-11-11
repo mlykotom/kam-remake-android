@@ -288,6 +288,8 @@ internal class KaMView(
 
             override fun performEditorAction(actionCode: Int): Boolean {
                 pressKey(13)
+                textInputShown = false
+                activity.runOnUiThread { activity.setSoftKeyboardVisible(false) }
                 return true
             }
 

@@ -127,6 +127,7 @@ type
     procedure Menu_Save_EditChange(Sender: TObject);
     procedure Menu_Save_CheckboxChange(Sender: TObject);
     procedure Menu_Save_Click(Sender: TObject);
+    function GetDefaultSaveName: UnicodeString;
     procedure Menu_Load_RefreshList(Sender: TObject);
     procedure Menu_Load_ListClick(Sender: TObject);
     procedure Menu_Load_Click(Sender: TObject);
@@ -530,6 +531,79 @@ begin
 end;
 
 
+function TKMGamePlayInterface.GetDefaultSaveName: UnicodeString;
+var
+  isMP: Boolean;
+  mapBase, lastClean, base, suffix, truncBase, candidate: UnicodeString;
+  startIdx, idx, spacePos, parsedIdx, I: Integer;
+  allDigits: Boolean;
+
+  function SanitizeBase(const aRaw: UnicodeString): UnicodeString;
+  begin
+    FilenameEdit_Save.SetTextSilently(aRaw);
+    Result := Trim(FilenameEdit_Save.Text);
+  end;
+
+  function SaveExists(const aName: UnicodeString): Boolean;
+  begin
+    Result := FileExists(gGame.SaveName(aName, EXT_SAVE_MAIN, isMP))
+              or DirectoryExists(gGame.SavePath(aName, isMP));
+  end;
+
+begin
+  isMP := (fUIMode in [umMP, umSpectate])
+          or (ALLOW_SAVE_IN_REPLAY and (gGameParams.Mode = gmReplayMulti));
+  mapBase := SanitizeBase(gGameParams.Name);
+  startIdx := 1;
+
+  if (fLastSaveName = '') or (UnicodeCompareText(Trim(fLastSaveName), mapBase) = 0) then
+    base := mapBase
+  else
+  begin
+    lastClean := SanitizeBase(fLastSaveName);
+    base := lastClean;
+    spacePos := Length(lastClean);
+    while (spacePos > 1) and (lastClean[spacePos] <> ' ') do
+      Dec(spacePos);
+    if (spacePos > 1) and (lastClean[spacePos] = ' ') and (Length(lastClean) - spacePos <= 6) then
+    begin
+      allDigits := True;
+      for I := spacePos + 1 to Length(lastClean) do
+        if (Ord(lastClean[I]) < Ord('0')) or (Ord(lastClean[I]) > Ord('9')) then
+        begin
+          allDigits := False;
+          Break;
+        end;
+      if allDigits then
+      begin
+        parsedIdx := StrToIntDef(string(Copy(lastClean, spacePos + 1, Length(lastClean) - spacePos)), 0);
+        if (parsedIdx >= 1) and (Trim(Copy(lastClean, 1, spacePos - 1)) <> '') then
+        begin
+          base := Trim(Copy(lastClean, 1, spacePos - 1));
+          startIdx := parsedIdx + 1;
+        end;
+      end;
+    end;
+  end;
+
+  if base = '' then
+    base := 'Save';
+
+  idx := startIdx;
+  while True do
+  begin
+    suffix := ' ' + UnicodeString(IntToStr(idx));
+    truncBase := Trim(Copy(base, 1, Max(1, Integer(FilenameEdit_Save.MaxLen) - Length(suffix))));
+    if truncBase = '' then
+      truncBase := 'Save';
+    candidate := truncBase + suffix;
+    if not SaveExists(candidate) then
+      Exit(candidate);
+    Inc(idx);
+  end;
+end;
+
+
 procedure TKMGamePlayInterface.Menu_Save_Click(Sender: TObject);
 var
   saveName: string;
@@ -706,11 +780,9 @@ begin
                                             or (ALLOW_SAVE_IN_REPLAY and (gGameParams.Mode = gmReplayMulti)));
       Panel_Save.Show;
       Label_MenuTitle.Caption := gResTexts[TX_MENU_SAVE_GAME];
-      if fLastSaveName = '' then
-        FilenameEdit_Save.Text := gGameParams.Name
-      else
-        FilenameEdit_Save.Text := fLastSaveName;
+      FilenameEdit_Save.Text := GetDefaultSaveName;
       FilenameEdit_Save.Focus;
+
       Menu_Save_EditChange(nil); // Displays "confirm overwrite" message if necessary
     end else
 
