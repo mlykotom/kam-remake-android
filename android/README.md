@@ -16,7 +16,7 @@ KaM Remake installer from [kamremake.com](https://www.kamremake.com/download/) (
 | Gesture | Action |
 |---|---|
 | tap | left click |
-| double-tap | right click; keep holding and move on the 2nd tap to choose troop direction |
+| double-tap on map | right click; keep holding and move on the 2nd tap to choose troop direction |
 | long press | right click; keep holding and move to choose troop direction |
 | two-finger tap | right click |
 | drag on the map | scroll the map (while a build/editor tool is active: draw with it) |

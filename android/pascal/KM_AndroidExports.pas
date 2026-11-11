@@ -7,7 +7,7 @@ unit KM_AndroidExports;
 //  - one finger drag on UI = left button drag (sliders, scrollbars, minimap)
 //  - one finger drag on map = scroll the map (or left button drag while a road/field/editor tool is active;
 //    when placing a building in gameplay, dragging the footprint moves the preview while dragging elsewhere pans)
-//  - double tap (or long press) on map or right-clickable UI = right button press; keep holding and move to pick troop direction, release to finish
+//  - double tap on map (or long press on map / right-clickable UI) = right button press; keep holding and move to pick troop direction, release to finish
 //  - two finger tap = right click
 //  - pinch = zoom, two finger drag = scroll
 interface
@@ -86,9 +86,9 @@ var
   fDownPos, fLastPos, fSecondDownPos: TPointF;
   fDownTime: QWord;
   fRightHoldMoved: Boolean;
-  fPendingTap: Boolean;
-  fPendingTapPos: TPointF;
-  fPendingTapTime: QWord;
+  fLastMapTap: Boolean;
+  fLastMapTapPos: TPointF;
+  fLastMapTapTime: QWord;
   fButtons: TShiftState = [];
   // Pinch
   fPinchStartDist, fPinchStartZoom: Single;
@@ -307,7 +307,6 @@ begin
 end;
 
 
-procedure CheckPendingTap; forward;
 procedure CheckLongPress; forward;
 
 var
@@ -432,7 +431,6 @@ begin
   if (gMain = nil) or not gMain.Started then Exit;
   try
     CheckSynchronize;
-    CheckPendingTap;
     CheckLongPress;
     if SelfTestActive then
       SelfTestFrame;
@@ -767,24 +765,6 @@ begin
 end;
 
 
-procedure FlushPendingTap;
-var
-  pos: TPointF;
-begin
-  if not fPendingTap then Exit;
-  fPendingTap := False;
-  pos := fPendingTapPos;
-  PerformLeftTap(pos);
-end;
-
-
-procedure CheckPendingTap;
-begin
-  if fPendingTap and (GetTickCount64 - fPendingTapTime >= DOUBLE_TAP_MS) then
-    FlushPendingTap;
-end;
-
-
 procedure CheckLongPress;
 begin
   if (((fTouchState = tsMapPending) and not GameplayBuildToolActive)
@@ -793,7 +773,7 @@ begin
   and (GetTickCount64 - fDownTime >= LONG_PRESS_MS) then
   begin
     // Right button press with haptic feedback, held until finger is lifted (allows to pick troops direction or hold-repeat +/- 10)
-    fPendingTap := False;
+    fLastMapTap := False;
     HostHaptic;
     SendMove(fDownPos);
     SendDown(mbRight, fDownPos);
@@ -808,7 +788,7 @@ procedure StartPinch(const P0, P1: TPointF);
 var
   vp: TKMViewport;
 begin
-  fPendingTap := False;
+  fLastMapTap := False;
   vp := GameViewport;
   fPinchStartDist := Max(Dist(P0, P1), 1);
   if vp <> nil then
@@ -825,6 +805,8 @@ end;
 procedure kam_touch(aAction, aPointerCount: Integer; X0, Y0, X1, Y1: Single); cdecl;
 var
   P0, P1, mid: TPointF;
+  prevSelected: TObject;
+  modalTap: Boolean;
 begin
   if (gGameApp = nil) or (gMain = nil) or not gMain.Started then Exit;
   gHostTouchMode := True;
@@ -836,13 +818,17 @@ begin
     case aAction of
       TOUCH_DOWN:
         begin
-          if fPendingTap
-             and (GetTickCount64 - fPendingTapTime <= DOUBLE_TAP_MS)
-             and (Dist(P0, fPendingTapPos) <= DOUBLE_TAP_SLOP) then
+          if fLastMapTap
+             and (GetTickCount64 - fLastMapTapTime <= DOUBLE_TAP_MS)
+             and (Dist(P0, fLastMapTapPos) <= DOUBLE_TAP_SLOP)
+             and not IsOverUI(P0)
+             and not TouchHouseModeActive
+             and not GameplayBuildToolActive
+             and not MapToolActive then
           begin
-            // Second tap on map or right-clickable UI: press right mouse button and hold until finger is lifted
-            fPendingTap := False;
-            fDownPos := fPendingTapPos;
+            // Second tap on map: press right mouse button and hold until finger is lifted
+            fLastMapTap := False;
+            fDownPos := fLastMapTapPos;
             fSecondDownPos := P0;
             fLastPos := fDownPos;
             fDownTime := GetTickCount64;
@@ -854,13 +840,13 @@ begin
             Exit;
           end;
 
-          FlushPendingTap;
+          fLastMapTap := False;
           fDownPos := P0;
           fLastPos := P0;
           fDownTime := GetTickCount64;
           SendMove(P0);
           if ScrollableSidebarAt(P0) <> nil then
-            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press / double tap)
+            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press)
             fTouchState := tsSidebarPending
           else
           if IsOverUI(P0) then
@@ -1027,39 +1013,39 @@ begin
       TOUCH_UP:
         begin
           case fTouchState of
-            tsSidebarPending:
-              if IsRightClickableUI(fDownPos) then
-              begin
-                fPendingTap := True;
-                fPendingTapPos := fDownPos;
-                fPendingTapTime := GetTickCount64;
-              end
-              else
-                PerformLeftTap(fDownPos);
-
-            tsUIPending:
-              begin
-                // Defer left click briefly so a double-tap becomes a right click instead
-                fPendingTap := True;
-                fPendingTapPos := fDownPos;
-                fPendingTapTime := GetTickCount64;
-              end;
+            tsSidebarPending, tsUIPending:
+              PerformLeftTap(fDownPos);
 
             tsMapPending:
               if TouchHouseModeActive then
               begin
+                fLastMapTap := False;
                 if (ActiveGamePlay <> nil) and ActiveGamePlay.TouchHouseTap(Round(fDownPos.X), Round(fDownPos.Y)) then
                   HostHaptic;
               end
               else
-              if GameplayBuildToolActive then
-                PerformLeftTap(fDownPos)
+              if GameplayBuildToolActive or MapToolActive then
+              begin
+                fLastMapTap := False;
+                PerformLeftTap(fDownPos);
+              end
               else
               begin
-                // Defer left click briefly so a double-tap becomes a right click instead
-                fPendingTap := True;
-                fPendingTapPos := fDownPos;
-                fPendingTapTime := GetTickCount64;
+                prevSelected := nil;
+                if gMySpectator <> nil then
+                  prevSelected := gMySpectator.Selected;
+                modalTap := (gSystem <> nil) and (gSystem.Cursor in [kmcBeacon, kmcJoinYes]);
+                PerformLeftTap(fDownPos);
+                // Left-clicking empty ground or enemies is a no-op in KaM Remake, so firing left-click
+                // immediately avoids tap latency while still allowing a 2nd map tap to trigger right-click.
+                if not modalTap and ((gMySpectator = nil) or (gMySpectator.Selected = prevSelected)) then
+                begin
+                  fLastMapTap := True;
+                  fLastMapTapPos := fDownPos;
+                  fLastMapTapTime := GetTickCount64;
+                end
+                else
+                  fLastMapTap := False;
               end;
 
             tsHousePreviewDrag:
@@ -1090,7 +1076,7 @@ begin
 
       TOUCH_CANCEL:
         begin
-          fPendingTap := False;
+          fLastMapTap := False;
           ReleaseButtons(fLastPos);
           fTouchState := tsIdle;
         end;
@@ -1182,7 +1168,7 @@ end;
 
 procedure kam_back; cdecl;
 begin
-  FlushPendingTap;
+  fLastMapTap := False;
   kam_key(KEY_DOWN, VK_ESCAPE, 0);
   kam_key(KEY_UP, VK_ESCAPE, 0);
 end;
