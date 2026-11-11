@@ -1,4 +1,4 @@
-﻿unit KM_GUIGameBuild;
+unit KM_GUIGameBuild;
 {$I KaM_Remake.inc}
 interface
 uses
@@ -10,6 +10,7 @@ uses
 type
   TKMGUIGameBuild = class
   private
+    procedure SelectButton(aButton: TKMButtonFlat);
     procedure Build_ButtonClick(Sender: TObject);
   protected
     Panel_Build: TKMPanel;
@@ -26,6 +27,7 @@ type
       Button_Build: array [1..GUI_HOUSE_COUNT] of TKMButtonFlat;
   public
     constructor Create(aParent: TKMPanel);
+    procedure ClearSelection;
     procedure PlanRoad;
     procedure PlanField;
     procedure PlanWine;
@@ -40,7 +42,7 @@ type
 
 implementation
 uses
-  KM_Defaults, KM_Utils,
+  KM_Defaults, KM_Platform, KM_Utils,
   KM_RenderUI, KM_Cursor, KM_HandsCollection,
   KM_Resource, KM_ResFonts, KM_ResHouses, KM_ResTexts, KM_ResTypes;
 
@@ -84,35 +86,48 @@ begin
 end;
 
 
+procedure TKMGUIGameBuild.ClearSelection;
+var
+  I: Integer;
+begin
+  for I := 0 to Panel_Build.ChildCount - 1 do
+    if Panel_Build.Childs[I] is TKMButtonFlat then
+      TKMButtonFlat(Panel_Build.Childs[I]).Down := False;
+
+  gCursor.Mode := cmNone;
+  gCursor.Tag1 := 0;
+  Label_BuildCost_Wood.Caption  := '-';
+  Label_BuildCost_Stone.Caption := '-';
+  Label_Build.Caption := '';
+  Image_Build_Selected.TexID := 0;
+end;
+
+
 procedure TKMGUIGameBuild.PlanRoad;
 begin
-  Button_BuildRoad.Down := True;
-  Build_ButtonClick(Button_BuildRoad);
+  SelectButton(Button_BuildRoad);
 end;
 
 
 procedure TKMGUIGameBuild.PlanField;
 begin
-  Button_BuildField.Down := True;
-  Build_ButtonClick(Button_BuildField);
+  SelectButton(Button_BuildField);
 end;
 
 
 procedure TKMGUIGameBuild.PlanWine;
 begin
-  Button_BuildWine.Down := True;
-  Build_ButtonClick(Button_BuildWine);
+  SelectButton(Button_BuildWine);
 end;
 
 
 procedure TKMGUIGameBuild.ErasePlan;
 begin
-  Button_BuildCancel.Down := True;
-  Build_ButtonClick(Button_BuildCancel);
+  SelectButton(Button_BuildCancel);
 end;
 
 
-procedure TKMGUIGameBuild.Build_ButtonClick(Sender: TObject);
+procedure TKMGUIGameBuild.SelectButton(aButton: TKMButtonFlat);
 
   procedure SetCost(aCursor: TKMCursorMode; aTag, aTexId, aWood, aStone: Word; const aCaption: UnicodeString);
   begin
@@ -130,9 +145,9 @@ var
   house: TKMHouseType;
   houseSpec: TKMHouseSpec;
 begin
-  if Sender = nil then
+  if aButton = nil then
   begin
-    gCursor.Mode := cmNone;
+    ClearSelection;
     Exit;
   end;
 
@@ -142,10 +157,7 @@ begin
       TKMButtonFlat(Panel_Build.Childs[I]).Down := False;
 
   //Press the button
-  TKMButtonFlat(Sender).Down := True;
-
-  //Reset building mode and see if it needs to be changed
-  SetCost(cmNone, 0, 0, 0, 0, '');
+  aButton.Down := True;
 
   if Button_BuildCancel.Down then
     SetCost(cmErase, 0, 340, 0, 0, gResTexts[TX_BUILD_DEMOLISH])
@@ -160,10 +172,20 @@ begin
     SetCost(cmWine, 0, 336, 1, 0, gResTexts[TX_BUILD_WINE])
   else
   begin
-    house := TKMHouseType(TKMButton(Sender).Tag);
+    house := TKMHouseType(aButton.Tag);
     houseSpec := gRes.Houses[house];
     SetCost(cmHouses, Byte(house), houseSpec.GUIIcon, houseSpec.WoodCost, houseSpec.StoneCost, houseSpec.HouseName);
   end;
+end;
+
+
+procedure TKMGUIGameBuild.Build_ButtonClick(Sender: TObject);
+begin
+  if (Sender = nil) or not (Sender is TKMButtonFlat)
+     or (PlatformIsTouchMode and TKMButtonFlat(Sender).Down) then
+    ClearSelection
+  else
+    SelectButton(TKMButtonFlat(Sender));
 end;
 
 
@@ -171,14 +193,17 @@ procedure TKMGUIGameBuild.Show;
 begin
   Panel_Build.Show;
   UpdateState;
-  Build_ButtonClick(Button_BuildRoad);
+  if PlatformIsTouchMode then
+    ClearSelection
+  else
+    SelectButton(Button_BuildRoad);
 end;
 
 
 procedure TKMGUIGameBuild.Hide;
 begin
   //Reset cursor
-  Build_ButtonClick(nil);
+  ClearSelection;
   Panel_Build.Hide;
 end;
 
@@ -213,6 +238,8 @@ begin
   end
   else
   begin
+    if Button_Build[I].Down then
+      ClearSelection;
     Button_Build[I].OnClick := nil;
     Button_Build[I].TexID := 41;
     Button_Build[I].Hint := gResTexts[TX_HOUSE_NOT_AVAILABLE]; //Building not available

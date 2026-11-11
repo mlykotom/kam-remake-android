@@ -23,6 +23,8 @@ type
     Tag1: Word;           //Tag to know building type, unit type etc
 //    Tag2: Word;           //Extra Tag
     DragOffset: TKMPoint; //used to adjust actual Cursor Cell
+    HasPreviewCell: Boolean; //Anchored tile preview for touch building placement
+    PreviewCell: TKMPoint;
     ObjectUID: Integer;   //Object found below cursor
 
     // MapEd brushes page
@@ -107,6 +109,11 @@ end;
 
 procedure TKMCursor.SetMode(aMode: TKMCursorMode);
 begin
+  if aMode <> cmHouses then
+  begin
+    HasPreviewCell := False;
+    PreviewCell := KMPOINT_ZERO;
+  end;
   fMode := aMode;
 
   Reset;
