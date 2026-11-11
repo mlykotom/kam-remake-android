@@ -1732,7 +1732,13 @@ begin
     begin
       gGame.GameInputProcess.CmdBuild(gicBuildHousePlan, P, houseType);
       if not gMySpectator.Hand.NeedToChooseFirstStorehouseInGame then
-        fGuiGameBuild.Show
+      begin
+        if not fGuiGameBuild.Visible then
+          SwitchPage(Button_Main[tbBuild])
+        else
+          fGuiGameBuild.Show;
+        fGuiGameBuild.PlanRoad;
+      end
       else
         gCursor.Mode := cmNone;
       UpdateTouchBuildUI;
