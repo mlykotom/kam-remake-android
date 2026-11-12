@@ -15,14 +15,16 @@ KaM Remake installer from [kamremake.com](https://www.kamremake.com/download/) (
 
 | Gesture | Action |
 |---|---|
-| tap | left click |
-| double-tap on map | right click; keep holding and move on the 2nd tap to choose troop direction |
-| long press | right click; keep holding and move to choose troop direction |
+| tap | left click (tap an active build/road/field/demolish tool again to toggle it off) |
+| drag building footprint | move house placement preview tile-by-tile, then tap floating Confirm (`✓`) / Cancel (`✗`) |
+| double-tap on map | right click; keep holding and move on the 2nd tap to choose troop direction (2.5x flower) |
+| long press (250 ms) | right click on map or right-clickable UI; keep holding and move to choose troop direction |
 | two-finger tap | right click |
-| drag on the map | scroll the map (while a build/editor tool is active: draw with it) |
+| drag on the map | scroll the map (while a road/field/editor tool is active: draw with it) |
 | pinch / two-finger drag | zoom / scroll |
-| vertical drag on the left panel | scroll the panel when it does not fit the screen |
-| Back button | Esc (skip video, close panel) |
+| vertical drag on the left panel | scroll the panel when it does not fit the screen (independent `Sidebar scale [%]` in Settings) |
+| top-left speed bar | pause / resume and `x1`..`x10` game speed controls |
+| Back button | Esc (skip video, cancel house preview, close panel) |
 | three-finger tap | interface scale (0.5–2.0) |
 
 USB/Bluetooth mouse and keyboard work as on PC.
@@ -47,15 +49,16 @@ android/toolchain/extract_data.sh ~/Downloads/kam_remake_installer.exe
 
 # 3. APK
 cd android
-./build_apk.sh                                      # debug APK without data (~30 MB)
-KAM_BUILD_TYPE=Release KAM_BUNDLE_DATA=1 ./build_apk.sh   # release APK with the game data inside (~0.85 GB)
+./build_apk.sh                                      # debug APK without data (~28 MB)
+KAM_BUILD_TYPE=Release ./build_apk.sh               # release APK without data (for GitHub Releases, ~28 MB)
+KAM_BUILD_TYPE=Release KAM_BUNDLE_DATA=1 ./build_apk.sh   # personal release APK with game data inside (~0.85 GB)
 ```
 
 The APK is in `android/app/build/outputs/apk/<debug|release>/`.
 
-- **APK with data** (`KAM_BUNDLE_DATA=1`): install and start, it unpacks the data once (~1 minute).
-- **APK without data**: copy `data, Campaigns, Maps, MapsMP, Music, Sounds, Tutorials` from the KaM Remake
-  folder to `/sdcard/Android/data/org.kamremake.android/files/` (`ANDROID_SERIAL=<device> ./push_data.sh`).
+- **APK without data** (default, safe to redistribute): on first launch, the **Game Data Setup** screen lets users import a `.zip` archive or unpacked folder of their *KaM Remake* installation via Android's system file picker. Developers can also push directly via `ANDROID_SERIAL=<device> ./push_data.sh` (to `/sdcard/Android/data/org.kamremake.android/files/`).
+- **APK with data** (`KAM_BUNDLE_DATA=1`, personal use only — contains copyrighted assets): install and start, it unpacks the data once (~1 minute).
+- **Release signing**: set `KAM_KEYSTORE_FILE`, `KAM_KEYSTORE_PASSWORD`, `KAM_KEY_ALIAS`, and `KAM_KEY_PASSWORD` before running `KAM_BUILD_TYPE=Release ./build_apk.sh` (falls back to debug signing when unset).
 
 Options: `KAM_MULTIPLAYER=1` shows the Multiplayer menu (hidden by default, not finished on Android);
 `KAM_FPC_FLAGS=-dANDROID_GLDEBUG` / `-dANDROID_MEMDEBUG` add GL and memory diagnostics.

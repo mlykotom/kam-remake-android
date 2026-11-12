@@ -7,10 +7,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import java.lang.reflect.Modifier
 import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class KaMAndroidTest {
 
@@ -104,6 +108,66 @@ class KaMAndroidTest {
             assertEquals(3, progressEvents.size)
             assertEquals(expectedTotal, progressEvents.last().first)
             assertEquals(expectedTotal, progressEvents.last().second)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun dataInstallerImportsFromZipWithWrapperFolderAndCanonicalizesCase() {
+        val tempDir = Files.createTempDirectory("kam_test_zip").toFile()
+        try {
+            val housesBytes = "houses-zip-data".toByteArray(Charsets.UTF_8)
+            val mapBytes = "campaign-map-data".toByteArray(Charsets.UTF_8)
+            val mpMapBytes = "mp-map-data".toByteArray(Charsets.UTF_8)
+
+            val zipBuf = ByteArrayOutputStream()
+            ZipOutputStream(zipBuf).use { zos ->
+                fun put(name: String, content: ByteArray) {
+                    zos.putNextEntry(ZipEntry(name))
+                    zos.write(content)
+                    zos.closeEntry()
+                }
+                put("KaM Remake\\DATA\\defines\\houses.dat", housesBytes)
+                put("KaM Remake/campaigns/TSK/TSK01.map", mapBytes)
+                put("KaM Remake/mapsmp/Bridge/Bridge.map", mpMapBytes)
+                put("KaM Remake/KaM_Remake.exe", "ignored-exe".toByteArray(Charsets.UTF_8))
+            }
+            val zipBytes = zipBuf.toByteArray()
+
+            DataInstaller.installFromZip(
+                openZip = { ByteArrayInputStream(zipBytes) },
+                dir = tempDir,
+                progress = { _, _ -> }
+            )
+
+            assertTrue(DataInstaller.isInstalled(tempDir))
+            assertTrue(DataInstaller.hasValidGameData(tempDir))
+            assertArrayEquals(housesBytes, File(tempDir, "data/defines/houses.dat").readBytes())
+            assertArrayEquals(mapBytes, File(tempDir, "Campaigns/TSK/TSK01.map").readBytes())
+            assertArrayEquals(mpMapBytes, File(tempDir, "MapsMP/Bridge/Bridge.map").readBytes())
+            assertFalse(File(tempDir, "KaM_Remake.exe").exists())
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test(expected = IOException::class)
+    fun dataInstallerRejectsZipWithoutHousesDat() {
+        val tempDir = Files.createTempDirectory("kam_test_bad_zip").toFile()
+        try {
+            val zipBuf = ByteArrayOutputStream()
+            ZipOutputStream(zipBuf).use { zos ->
+                zos.putNextEntry(ZipEntry("random/readme.txt"))
+                zos.write("hello".toByteArray(Charsets.UTF_8))
+                zos.closeEntry()
+            }
+            val zipBytes = zipBuf.toByteArray()
+            DataInstaller.installFromZip(
+                openZip = { ByteArrayInputStream(zipBytes) },
+                dir = tempDir,
+                progress = { _, _ -> }
+            )
         } finally {
             tempDir.deleteRecursively()
         }
