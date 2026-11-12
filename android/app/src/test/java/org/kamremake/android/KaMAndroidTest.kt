@@ -174,6 +174,46 @@ class KaMAndroidTest {
     }
 
     @Test
+    fun classifyPathListDistinguishesOriginalKaMFromRemakeAndUnknown() {
+        val gogOriginal = listOf(
+            "app/KM_TPR.exe",
+            "app/data/defines/houses.dat",
+            "app/data/gfx/res/gui.rx",
+            "app/data/gfx/res/units.rx"
+        )
+        assertEquals(DataInstaller.ArchiveKind.ORIGINAL_KAM, DataInstaller.classifyPathList(gogOriginal))
+
+        val remakeArchive = listOf(
+            "app/KaM_Remake.exe",
+            "app/data/defines/houses.dat",
+            "app/data/Sprites/Units.rxa",
+            "app/data/Sprites/GUI.rxx"
+        )
+        assertEquals(DataInstaller.ArchiveKind.KAM_REMAKE_DATA, DataInstaller.classifyPathList(remakeArchive))
+
+        val unrelated = listOf("docs/readme.txt", "setup.ini")
+        assertEquals(DataInstaller.ArchiveKind.UNKNOWN, DataInstaller.classifyPathList(unrelated))
+    }
+
+    @Test(expected = IOException::class)
+    fun downloadRemakeRequiresOriginalGameVerificationFirst() {
+        val tempDir = Files.createTempDirectory("kam_test_unverified").toFile()
+        val tempCache = Files.createTempDirectory("kam_test_cache").toFile()
+        try {
+            assertFalse(DataInstaller.isOriginalGameVerified(tempDir))
+            DataInstaller.downloadAndInstallRemake(
+                dir = tempDir,
+                cacheDir = tempCache,
+                status = {},
+                downloadUrl = "http://127.0.0.1:1/unused"
+            )
+        } finally {
+            tempDir.deleteRecursively()
+            tempCache.deleteRecursively()
+        }
+    }
+
+    @Test
     fun calculateVirtualSizeRespectsMenuAndInGameBounds() {
         // 1920x1080 in menu at scale 1.0 -> height is base 720, width scaled by 16:9 -> 1280x720
         val menuDefault = KaMView.calculateVirtualSize(w = 1920, h = 1080, uiScale = 1.0f, inGame = false)

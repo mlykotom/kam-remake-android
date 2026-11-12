@@ -6,11 +6,12 @@ TC="${KAM_TOOLCHAIN:-$(cd "$ANDROID_DIR/.." && pwd)/toolchain}"
 JNI="$ANDROID_DIR/app/src/main/jniLibs/arm64-v8a"
 mkdir -p "$JNI"
 "$ANDROID_DIR/native/build_bass.sh"
+"$ANDROID_DIR/native/build_innoextract.sh"
 # Always build the engine from scratch: incremental FPC 3.2.2 builds hit "Internal error 200611031" with generics
 rm -rf "$ANDROID_DIR/build/units_main"
 "$ANDROID_DIR/build_native.sh" > "$ANDROID_DIR/build/last.log" 2>&1 || { grep -E 'Error|Fatal' "$ANDROID_DIR/build/last.log" | head -20; exit 1; }
 for f in libGL.so; do cp "$TC/gl4es/lib/$f" "$JNI/"; done
-for f in libopenal.so libogg.so libvorbis.so libvorbisfile.so libbass.so; do cp "$TC/android-libs/lib/$f" "$JNI/"; done
+for f in libopenal.so libogg.so libvorbis.so libvorbisfile.so libbass.so libinnoextract_jni.so; do cp "$TC/android-libs/lib/$f" "$JNI/"; done
 rm -f "$JNI"/*.res "$JNI"/*.o
 # KAM_BUNDLE_DATA=1: include game data in the APK (links, no copies)
 GRADLE_ARGS=()
