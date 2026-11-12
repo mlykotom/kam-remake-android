@@ -56,7 +56,7 @@ KAM_BUILD_TYPE=Release KAM_BUNDLE_DATA=1 ./build_apk.sh   # personal release APK
 
 The APK is in `android/app/build/outputs/apk/<debug|release>/`.
 
-- **APK without data** (default, safe to redistribute): on first launch, the **Game Data Setup** screen lets users import a `.zip` archive or unpacked folder of their *KaM Remake* installation via Android's system file picker. Developers can also push directly via `ANDROID_SERIAL=<device> ./push_data.sh` (to `/sdcard/Android/data/org.kamremake.android/files/`).
+- **APK without data** (default, safe to redistribute): on first launch, the **Game Data Setup** screen lets users verify their original *Knights and Merchants* game (GOG `.exe`, Steam `.zip`, or folder) and download + extract the official *KaM Remake* package directly on-device via embedded `libinnoextract_jni.so` — or import an existing `.zip` / folder. Developers can also push directly via `ANDROID_SERIAL=<device> ./push_data.sh` (to `/sdcard/Android/data/org.kamremake.android/files/`).
 - **APK with data** (`KAM_BUNDLE_DATA=1`, personal use only — contains copyrighted assets): install and start, it unpacks the data once (~1 minute).
 - **Release signing**: set `KAM_KEYSTORE_FILE`, `KAM_KEYSTORE_PASSWORD`, `KAM_KEY_ALIAS`, and `KAM_KEY_PASSWORD` before running `KAM_BUILD_TYPE=Release ./build_apk.sh` (falls back to debug signing when unset).
 

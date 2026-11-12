@@ -121,4 +121,7 @@ fi
 # --- LazUtils precompiled for the target ---
 KAM_TOOLCHAIN="$TC" "$REPO/android/build_lazutils.sh" > "$TC/lazutils-build.log" 2>&1 || { tail -20 "$TC/lazutils-build.log"; exit 1; }
 
+# --- innoextract JNI library (for on-device GOG / KaM Remake installer unpacking) ---
+KAM_TOOLCHAIN="$TC" "$REPO/android/native/build_innoextract.sh"
+
 echo "Toolchain ready in $TC"

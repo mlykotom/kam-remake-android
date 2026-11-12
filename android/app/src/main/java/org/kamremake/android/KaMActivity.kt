@@ -138,7 +138,10 @@ class KaMActivity : Activity() {
     }
 
     private var importStatusView: TextView? = null
-    private var importButtonsRow: LinearLayout? = null
+    private var importControlsContainer: LinearLayout? = null
+    private var step1StatusLabel: TextView? = null
+    private var step2DownloadBtn: Button? = null
+    private var step2LocalExeBtn: Button? = null
     private var targetInstallDir: File? = null
 
     private fun showMissingData(dir: File) {
@@ -153,97 +156,253 @@ class KaMActivity : Activity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(px(36), px(24), px(36), px(24))
+            setPadding(px(28), px(16), px(28), px(16))
         }
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(24), px(20), px(24), px(20))
+            setPadding(px(22), px(16), px(22), px(16))
             setBackgroundColor(Color.rgb(30, 26, 22))
         }
 
         val title = TextView(this).apply {
             text = "KaM Remake — Game Data Setup"
             setTextColor(Color.rgb(235, 205, 140))
-            textSize = 20f
+            textSize = 19f
         }
-        val body = TextView(this).apply {
-            setTextColor(Color.rgb(220, 215, 205))
-            textSize = 14f
-            setPadding(0, px(10), 0, px(14))
+        val intro = TextView(this).apply {
+            setTextColor(Color.rgb(215, 210, 200))
+            textSize = 13f
+            setPadding(0, px(6), 0, px(10))
             text =
-                "This open-source engine does not include copyrighted Knights and Merchants game assets.\n\n" +
-                "1. Purchase Knights and Merchants (e.g. on Steam or GOG).\n" +
-                "2. Install KaM Remake on your PC from kamremake.com (using your owned game copy).\n" +
-                "3. Compress your installed KaM Remake folder into a .zip file, copy it to this device, and import it below:"
+                "No copyrighted game files are bundled. Own Knights and Merchants (GOG or Steam) to set up right on your device — no Windows PC required:"
         }
 
-        val buttons = LinearLayout(this).apply {
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        importControlsContainer = controls
+
+        // Step 1: Verify Original Game
+        val step1Header = TextView(this).apply {
+            setTextColor(Color.rgb(235, 205, 140))
+            textSize = 13.5f
+            text = "Step 1 — Verify Original Knights and Merchants"
+        }
+        step1StatusLabel = step1Header
+
+        val step1Hint = TextView(this).apply {
+            setTextColor(Color.rgb(170, 165, 155))
+            textSize = 12f
+            setPadding(0, px(2), 0, px(6))
+            text = "On phone-only: buy on GOG.com in your browser, download the GOG offline backup .exe, and select it below (or select your Steam/GOG .zip or folder)."
+        }
+
+        val step1Row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        val verifyFileBtn = Button(this).apply {
+            text = "Verify GOG .exe / Game .zip"
+            isAllCaps = false
+            setTextColor(Color.rgb(25, 20, 14))
+            setBackgroundColor(Color.rgb(218, 180, 104))
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { pickAnyFile(REQ_VERIFY_ORIGINAL_FILE) }
+        }
+        val verifyFolderBtn = Button(this).apply {
+            text = "Verify Game Folder"
+            isAllCaps = false
+            setTextColor(Color.rgb(230, 210, 165))
+            setBackgroundColor(Color.rgb(58, 50, 40))
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { pickFolder(REQ_VERIFY_ORIGINAL_FOLDER) }
+        }
+        step1Row.addView(verifyFileBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = px(10)
+        })
+        step1Row.addView(verifyFolderBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // Step 2: Auto-Download & Extract KaM Remake Assets
+        val step2Header = TextView(this).apply {
+            setTextColor(Color.rgb(235, 205, 140))
+            textSize = 13.5f
+            setPadding(0, px(12), 0, px(6))
+            text = "Step 2 — Install KaM Remake Assets (Built-In Extractor)"
+        }
+        val step2Row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        val dlBtn = Button(this).apply {
+            text = "Download & Install Remake (~679 MB)"
+            isAllCaps = false
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { startRemakeAutoDownload() }
+        }
+        step2DownloadBtn = dlBtn
+
+        val localExeBtn = Button(this).apply {
+            text = "Or Select Remake .exe"
+            isAllCaps = false
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { pickAnyFile(REQ_PICK_REMAKE_EXE) }
+        }
+        step2LocalExeBtn = localExeBtn
+
+        step2Row.addView(dlBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = px(10)
+        })
+        step2Row.addView(localExeBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // Direct PC KaM Remake Import
+        val directHeader = TextView(this).apply {
+            setTextColor(Color.rgb(175, 170, 160))
+            textSize = 12f
+            setPadding(0, px(12), 0, px(6))
+            text = "Already installed KaM Remake on PC? Import directly in one step:"
+        }
+        val directRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START
         }
         val zipBtn = Button(this).apply {
-            text = "Import KaM Remake .zip"
-            isAllCaps = false
-            setTextColor(Color.rgb(25, 20, 14))
-            setBackgroundColor(Color.rgb(218, 180, 104))
-            setPadding(px(18), px(10), px(18), px(10))
-            setOnClickListener { pickGameZip() }
-        }
-        val folderBtn = Button(this).apply {
-            text = "Select Unpacked Folder"
+            text = "Import Remake .zip"
             isAllCaps = false
             setTextColor(Color.rgb(230, 210, 165))
             setBackgroundColor(Color.rgb(58, 50, 40))
-            setPadding(px(18), px(10), px(18), px(10))
-            setOnClickListener { pickGameFolder() }
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { pickAnyFile(REQ_PICK_ZIP) }
         }
-        buttons.addView(zipBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            marginEnd = px(12)
+        val folderBtn = Button(this).apply {
+            text = "Select Remake Folder"
+            isAllCaps = false
+            setTextColor(Color.rgb(230, 210, 165))
+            setBackgroundColor(Color.rgb(58, 50, 40))
+            setPadding(px(14), px(8), px(14), px(8))
+            setOnClickListener { pickFolder(REQ_PICK_FOLDER) }
+        }
+        directRow.addView(zipBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = px(10)
         })
-        buttons.addView(folderBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        importButtonsRow = buttons
+        directRow.addView(folderBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        controls.addView(step1Header)
+        controls.addView(step1Hint)
+        controls.addView(step1Row)
+        controls.addView(step2Header)
+        controls.addView(step2Row)
+        controls.addView(directHeader)
+        controls.addView(directRow)
 
         val status = TextView(this).apply {
-            setTextColor(Color.rgb(160, 155, 145))
+            setTextColor(Color.rgb(155, 150, 140))
             textSize = 12f
-            setPadding(0, px(12), 0, 0)
-            text = "Or copy data, Campaigns, Maps, MapsMP, Music, Sounds, Tutorials via ADB to:\n${dir.absolutePath}"
+            setPadding(0, px(10), 0, 0)
+            text = "Ready."
         }
         importStatusView = status
 
         card.addView(title)
-        card.addView(body)
-        card.addView(buttons)
+        card.addView(intro)
+        card.addView(controls)
         card.addView(status)
         container.addView(
             card,
-            LinearLayout.LayoutParams(px(640).coerceAtMost(resources.displayMetrics.widthPixels - px(48)), LinearLayout.LayoutParams.WRAP_CONTENT)
+            LinearLayout.LayoutParams(px(680).coerceAtMost(resources.displayMetrics.widthPixels - px(32)), LinearLayout.LayoutParams.WRAP_CONTENT)
         )
         scroll.addView(container, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(scroll, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+        refreshSetupStepStates(dir)
     }
 
-    private fun pickGameZip() {
+    private fun refreshSetupStepStates(dir: File) {
+        val verified = DataInstaller.isOriginalGameVerified(dir)
+        step1StatusLabel?.apply {
+            if (verified) {
+                text = "Step 1 — ✓ Original Knights and Merchants Verified"
+                setTextColor(Color.rgb(135, 215, 140))
+            } else {
+                text = "Step 1 — Verify Original Knights and Merchants"
+                setTextColor(Color.rgb(235, 205, 140))
+            }
+        }
+        step2DownloadBtn?.apply {
+            isEnabled = verified
+            setTextColor(if (verified) Color.rgb(25, 20, 14) else Color.rgb(120, 115, 108))
+            setBackgroundColor(if (verified) Color.rgb(218, 180, 104) else Color.rgb(45, 40, 35))
+        }
+        step2LocalExeBtn?.apply {
+            isEnabled = verified
+            setTextColor(if (verified) Color.rgb(230, 210, 165) else Color.rgb(120, 115, 108))
+            setBackgroundColor(if (verified) Color.rgb(58, 50, 40) else Color.rgb(45, 40, 35))
+        }
+    }
+
+    private fun pickAnyFile(reqCode: Int) {
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
-                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
             }
             @Suppress("DEPRECATION")
-            startActivityForResult(intent, REQ_PICK_ZIP)
+            startActivityForResult(intent, reqCode)
         } catch (e: Exception) {
             Toast.makeText(this, "No file picker available: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun pickGameFolder() {
+    private fun pickFolder(reqCode: Int) {
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             @Suppress("DEPRECATION")
-            startActivityForResult(intent, REQ_PICK_FOLDER)
+            startActivityForResult(intent, reqCode)
         } catch (e: Exception) {
             Toast.makeText(this, "Folder picker not supported on this device: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun runSetupTask(initialStatus: String, task: (File, (String) -> Unit) -> Boolean) {
+        val dir = targetInstallDir ?: return
+        importControlsContainer?.visibility = android.view.View.GONE
+        importStatusView?.apply {
+            setTextColor(Color.rgb(235, 205, 140))
+            textSize = 14f
+            text = initialStatus
+        }
+
+        Thread({
+            try {
+                val updateStatus: (String) -> Unit = { msg ->
+                    runOnUiThread { importStatusView?.text = msg }
+                }
+                val installedComplete = task(dir, updateStatus)
+                runOnUiThread {
+                    if (installedComplete) {
+                        recreate()
+                    } else {
+                        importControlsContainer?.visibility = android.view.View.VISIBLE
+                        refreshSetupStepStates(dir)
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    importControlsContainer?.visibility = android.view.View.VISIBLE
+                    refreshSetupStepStates(dir)
+                    importStatusView?.apply {
+                        setTextColor(Color.rgb(255, 140, 130))
+                        textSize = 13f
+                        text = e.message ?: "Setup failed."
+                    }
+                }
+            }
+        }, "KaMDataSetup").start()
+    }
+
+    private fun startRemakeAutoDownload() {
+        runSetupTask("Starting KaM Remake download…") { dir, status ->
+            DataInstaller.downloadAndInstallRemake(dir, cacheDir, status)
+            true
         }
     }
 
@@ -253,46 +412,109 @@ class KaMActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val dir = targetInstallDir ?: return
 
-        if (requestCode != REQ_PICK_ZIP && requestCode != REQ_PICK_FOLDER) return
-
-        importButtonsRow?.visibility = android.view.View.GONE
-        importStatusView?.apply {
-            setTextColor(Color.rgb(235, 205, 140))
-            textSize = 15f
-            text = "Importing game data… 0%"
-        }
-
-        Thread({
-            try {
-                val onProg = DataInstaller.Progress { done, total ->
-                    val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
-                    runOnUiThread {
-                        importStatusView?.text = "Importing game data… $pct%"
-                    }
-                }
-                if (requestCode == REQ_PICK_ZIP) {
-                    DataInstaller.installFromZip(
-                        openZip = { contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open selected ZIP") },
-                        dir = dir,
-                        progress = onProg
-                    )
-                } else {
-                    DataInstaller.installFromDocumentTree(contentResolver, uri, dir, onProg)
-                }
-                runOnUiThread(::recreate)
-            } catch (e: Exception) {
-                runOnUiThread {
-                    importButtonsRow?.visibility = android.view.View.VISIBLE
-                    importStatusView?.apply {
-                        setTextColor(Color.rgb(255, 140, 130))
-                        textSize = 13f
-                        text = "Import failed: ${e.message}"
+        when (requestCode) {
+            REQ_VERIFY_ORIGINAL_FILE -> {
+                runSetupTask("Verifying selected game file…") { dir, status ->
+                    when (DataInstaller.verifyOriginalFromFileUri(contentResolver, uri, cacheDir, status)) {
+                        DataInstaller.ArchiveKind.ORIGINAL_KAM -> {
+                            DataInstaller.markOriginalGameVerified(dir)
+                            runOnUiThread {
+                                importStatusView?.apply {
+                                    setTextColor(Color.rgb(135, 215, 140))
+                                    text = "Original Knights and Merchants verified! Now tap 'Download & Install Remake' in Step 2."
+                                }
+                            }
+                            false
+                        }
+                        DataInstaller.ArchiveKind.KAM_REMAKE_DATA -> {
+                            // If user selected a .zip of already-installed KaM Remake, import it directly;
+                            // if they selected the Remake .exe before verifying original KaM, prompt for Step 1 first.
+                            val header = ByteArray(2)
+                            contentResolver.openInputStream(uri)?.use { it.read(header) }
+                            val isZip = header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
+                            if (isZip) {
+                                DataInstaller.installFromZip(
+                                    openZip = { contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open ZIP") },
+                                    dir = dir,
+                                    progress = { done, total ->
+                                        val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
+                                        status("Importing KaM Remake ZIP… $pct%")
+                                    }
+                                )
+                                true
+                            } else {
+                                throw java.io.IOException(
+                                    "That file is the KaM Remake installer. Please select your original Knights and Merchants (GOG setup .exe or Steam .zip/folder) in Step 1 first."
+                                )
+                            }
+                        }
+                        DataInstaller.ArchiveKind.UNKNOWN -> {
+                            throw java.io.IOException(
+                                "Could not recognize original Knights and Merchants files (e.g. gui.rx / units.rx).\n" +
+                                    "Please select the GOG offline installer (.exe) or a .zip/folder of your Steam or GOG Knights and Merchants folder."
+                            )
+                        }
                     }
                 }
             }
-        }, "KaMDataUserImport").start()
+            REQ_VERIFY_ORIGINAL_FOLDER -> {
+                runSetupTask("Checking selected folder…") { dir, status ->
+                    when (DataInstaller.classifyDocumentTree(contentResolver, uri)) {
+                        DataInstaller.ArchiveKind.ORIGINAL_KAM -> {
+                            DataInstaller.markOriginalGameVerified(dir)
+                            runOnUiThread {
+                                importStatusView?.apply {
+                                    setTextColor(Color.rgb(135, 215, 140))
+                                    text = "Original Knights and Merchants folder verified! Now tap 'Download & Install Remake' in Step 2."
+                                }
+                            }
+                            false
+                        }
+                        DataInstaller.ArchiveKind.KAM_REMAKE_DATA -> {
+                            DataInstaller.installFromDocumentTree(contentResolver, uri, dir) { done, total ->
+                                val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
+                                status("Importing KaM Remake folder… $pct%")
+                            }
+                            true
+                        }
+                        DataInstaller.ArchiveKind.UNKNOWN -> {
+                            throw java.io.IOException(
+                                "Could not find original Knights and Merchants files (data/gfx/res/*.rx) in that folder."
+                            )
+                        }
+                    }
+                }
+            }
+            REQ_PICK_REMAKE_EXE -> {
+                runSetupTask("Extracting KaM Remake installer…") { dir, status ->
+                    DataInstaller.installFromRemakeExeUri(contentResolver, uri, dir, cacheDir, status)
+                    true
+                }
+            }
+            REQ_PICK_ZIP -> {
+                runSetupTask("Importing KaM Remake ZIP… 0%") { dir, status ->
+                    DataInstaller.installFromZip(
+                        openZip = { contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open selected ZIP") },
+                        dir = dir,
+                        progress = { done, total ->
+                            val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
+                            status("Importing KaM Remake ZIP… $pct%")
+                        }
+                    )
+                    true
+                }
+            }
+            REQ_PICK_FOLDER -> {
+                runSetupTask("Importing KaM Remake folder… 0%") { dir, status ->
+                    DataInstaller.installFromDocumentTree(contentResolver, uri, dir) { done, total ->
+                        val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
+                        status("Importing KaM Remake folder… $pct%")
+                    }
+                    true
+                }
+            }
+        }
     }
 
     private fun hideSystemBars() {
@@ -509,5 +731,8 @@ class KaMActivity : Activity() {
         private const val PREF_UI_SCALE = "ui_scale"
         private const val REQ_PICK_ZIP = 1001
         private const val REQ_PICK_FOLDER = 1002
+        private const val REQ_VERIFY_ORIGINAL_FILE = 1003
+        private const val REQ_VERIFY_ORIGINAL_FOLDER = 1004
+        private const val REQ_PICK_REMAKE_EXE = 1005
     }
 }

@@ -6,7 +6,7 @@ Native **ARM64 (`arm64-v8a`)** Android port of [**KaM Remake**](https://github.c
 
 > [!IMPORTANT]
 > **No copyrighted game assets are included in this repository or in release APKs.**
-> To play, you must own a legitimate copy of ***Knights and Merchants*** (e.g. from [Steam](https://store.steampowered.com/app/253900/Knights_and_Merchants/) or [GOG.com](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion)) and prepare the game files using the free official [**KaM Remake** installer](https://www.kamremake.com/download/).
+> To play, you must own a legitimate copy of ***Knights and Merchants*** (e.g. from [GOG.com](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) or [Steam](https://store.steampowered.com/app/253900/Knights_and_Merchants/)). You can complete the entire setup **directly on your Android device** — no Windows PC, Wine, or `adb` required!
 
 ---
 
@@ -40,10 +40,10 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ![Fullscreen Widescreen Main Menu](android/docs/images/main_menu.png)
 
-### 5. Smart Soft Keyboard, Save Quality-of-Life & Built-In Data Importer
+### 5. Smart Soft Keyboard, Save Quality-of-Life & Zero-PC Built-In Setup
 - **Viewport Keyboard Shift:** The Android soft keyboard opens only when you tap an editable text box and shifts the screen upward so zoomed sidebar text fields stay visible above the keyboard.
 - **Auto-Indexed Saves:** Save filenames auto-increment (`Save 1`, `Save 2`, …), sort naturally, and support loading saves from older *KaM Remake* revisions.
-- **In-App Game Data Setup:** Import your *KaM Remake* `.zip` archive or unpacked folder directly through Android's system file picker on first launch — no PC command line or `adb` required on your phone.
+- **Zero-PC On-Device Game Setup (`libinnoextract` Inside):** Verify your purchased GOG offline installer (`.exe`) or Steam/GOG game folder right on your phone, then download and unpack the official *KaM Remake* asset package natively on-device with one tap — or import an existing `.zip` / folder in one step.
 
 ![In-App Game Data Setup](android/docs/images/setup_import.png)
 
@@ -70,22 +70,22 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ## Installation
 
-### Step 1: Buy the Official Game & Prepare KaM Remake Data
-1. Purchase ***Knights and Merchants*** officially on [**Steam**](https://store.steampowered.com/app/253900/Knights_and_Merchants/) or [**GOG.com**](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) (or use your original CD).
-   - *Note for Steam users:* Launch *Knights and Merchants* at least once on Steam before running the Remake installer so it detects your installation.
-2. Download and run the official [**KaM Remake** installer](https://www.kamremake.com/download/) on your PC (it verifies your original game and generates the combined Remake game folder).
-   - *macOS / Linux alternative:* If you already have the full KaM Remake installer `.exe`, you can unpack it with `innoextract`:
-     ```sh
-     brew install innoextract   # or apt install innoextract
-     innoextract -s -d kam_data kam_remake_full_installer.exe
-     ```
+> [!NOTE]
+> **Why are both the original game and *KaM Remake* assets needed?**
+> Classic 1998/2001 *Knights and Merchants* uses legacy `.rx` sprites, `.fnt` bitmap fonts, and `.evt` scripts, whereas the *KaM Remake* engine requires its remastered `.rxa`/`.rxx` sprite packs, Unicode `.uni` fonts, and PascalScript campaigns. Rather than making you run a Windows `.exe` on a PC, **the Android app embeds native `innoextract` to verify your original game and install the Remake assets directly on your device.**
 
-### Step 2A: Easy Installation on Your Phone (Recommended — No ADB Needed)
-1. On your computer, compress your installed **`KaM Remake`** folder (containing `data`, `Campaigns`, `Maps`, `MapsMP`, `Music`, `Sounds`, `Tutorials`) into a `.zip` file (e.g. `KaM_Remake.zip`), and copy it to your Android device (via USB file transfer, Quick Share, Google Drive, etc.).
-2. Download the latest **`app-release.apk`** from the [**Releases**](../../releases) page and install it on your Android device.
-3. Open **KaM Remake** and tap **Import KaM Remake .zip** (or **Select Unpacked Folder** if you copied the unzipped directory). The app will verify `data/defines/houses.dat`, unpack the assets into its app storage, and start automatically.
+### Option A: 100% On Your Phone (Recommended — No PC Needed)
+1. Purchase ***Knights and Merchants*** on [**GOG.com**](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) right in your phone's browser and download the **GOG offline backup installer (`.exe`)** to your `Downloads` folder *(or copy your Steam/GOG `Knights and Merchants` folder or `.zip` to your device)*.
+2. Download the latest **`app-release.apk`** from [**Releases**](../../releases), install it, and open **KaM Remake**.
+3. **Step 1 in the app:** Tap **Verify GOG .exe / Game .zip** (or **Verify Game Folder**) and select your purchased original game file.
+4. **Step 2 in the app:** Tap **Download & Install Remake (~679 MB)**. The app downloads the official *KaM Remake* package and extracts the game assets natively on your phone, then launches straight into the game! *(Offline? You can also select a locally downloaded `KaM-Remake-Beta-*.exe`.)*
 
-### Step 2B: Developer Build from Source (macOS)
+### Option B: Import from an Existing PC *KaM Remake* Installation
+If you already installed [*KaM Remake*](https://www.kamremake.com/download/) on your computer (using your [Steam](https://store.steampowered.com/app/253900/Knights_and_Merchants/) or [GOG](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) copy):
+1. Compress your `KaM Remake` folder into a `.zip` (or copy the unpacked folder) to your Android device.
+2. Open **KaM Remake** and tap **Import Remake .zip** (or **Select Remake Folder**).
+
+### Option C: Developer Build from Source (macOS)
 Requirements: macOS (Apple Silicon or Intel), `brew install fpc innoextract`, Android SDK with NDK `29.0.13599879` & CMake, JDK 17+.
 
 ```sh
@@ -138,7 +138,7 @@ See [`android/README.md`](android/README.md) for architecture details, `adb` dat
 - ***Knights and Merchants: The Shattered Kingdom* & *The Peasants Rebellion*** — Created by **Joymania Entertainment** and published by **TopWare Interactive**. All original game art, sounds, music, and campaigns are © their respective owners.
 - **[KaM Remake](https://github.com/reyandme/kam_remake)** — Created and maintained by **Krom**, **Lewin**, **Rey**, **Toxic**, and the [KaM Remake community](https://www.kamremake.com/) ([original README](README.KaM_Remake.md)).
 - **Initial Android ARM64 Port Foundation** — [**Vadim Makarov (`Vadim170`)**](https://github.com/Vadim170/kam-remake-android) for the foundational `aarch64-android` Free Pascal port, LCL compatibility shims, `gl4es` & native BASS audio bridge, and reproducible toolchain scripts.
-- **Open-Source Libraries** — [Free Pascal](https://www.freepascal.org/) & Lazarus `LazUtils`, [gl4es](https://github.com/ptitSeb/gl4es), [OpenAL Soft](https://openal-soft.org/), `libogg` / `libvorbis`, `minimp3`, [PascalScript](https://github.com/remobjects/pascalscript), and [libVLC for Android](https://code.videolan.org/videolan/vlc-android).
+- **Open-Source Libraries** — [Free Pascal](https://www.freepascal.org/) & Lazarus `LazUtils`, [gl4es](https://github.com/ptitSeb/gl4es), [OpenAL Soft](https://openal-soft.org/), `libogg` / `libvorbis`, `minimp3`, [PascalScript](https://github.com/remobjects/pascalscript), [innoextract](https://constexpr.org/innoextract/) (with Boost, XZ Utils, and `bzip2`), and [libVLC for Android](https://code.videolan.org/videolan/vlc-android).
 
 ---
 
