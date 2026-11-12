@@ -28,6 +28,17 @@ android {
         jvmTarget = '17'
     }
 
+    signingConfigs {
+        release {
+            if (System.getenv('KAM_KEYSTORE_FILE')) {
+                storeFile file(System.getenv('KAM_KEYSTORE_FILE'))
+                storePassword System.getenv('KAM_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KAM_KEY_ALIAS')
+                keyPassword System.getenv('KAM_KEY_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
         debug { debuggable true }
         release {
@@ -35,7 +46,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig System.getenv('KAM_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.debug
         }
     }
 

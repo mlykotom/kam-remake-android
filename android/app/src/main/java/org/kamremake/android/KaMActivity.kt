@@ -19,8 +19,10 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.webkit.MimeTypeMap
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -135,15 +137,162 @@ class KaMActivity : Activity() {
         }, "KaMDataInstall").start()
     }
 
+    private var importStatusView: TextView? = null
+    private var importButtonsRow: LinearLayout? = null
+    private var targetInstallDir: File? = null
+
     private fun showMissingData(dir: File) {
-        val t = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(48, 48, 48, 48)
-            text = "Game data not found.\n\nCopy the KaM Remake game folder (data, Campaigns, Maps, MapsMP, Music, Sounds, Tutorials) to:\n\n" +
-                "${dir.absolutePath}\n\nand start the app again."
+        targetInstallDir = dir
+        val dp = resources.displayMetrics.density
+        fun px(v: Int) = (v * dp).roundToInt()
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Color.rgb(18, 16, 14))
         }
-        root.addView(t)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(px(36), px(24), px(36), px(24))
+        }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(24), px(20), px(24), px(20))
+            setBackgroundColor(Color.rgb(30, 26, 22))
+        }
+
+        val title = TextView(this).apply {
+            text = "KaM Remake — Game Data Setup"
+            setTextColor(Color.rgb(235, 205, 140))
+            textSize = 20f
+        }
+        val body = TextView(this).apply {
+            setTextColor(Color.rgb(220, 215, 205))
+            textSize = 14f
+            setPadding(0, px(10), 0, px(14))
+            text =
+                "This open-source engine does not include copyrighted Knights and Merchants game assets.\n\n" +
+                "1. Purchase Knights and Merchants (e.g. on Steam or GOG).\n" +
+                "2. Install KaM Remake on your PC from kamremake.com (using your owned game copy).\n" +
+                "3. Compress your installed KaM Remake folder into a .zip file, copy it to this device, and import it below:"
+        }
+
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        val zipBtn = Button(this).apply {
+            text = "Import KaM Remake .zip"
+            isAllCaps = false
+            setTextColor(Color.rgb(25, 20, 14))
+            setBackgroundColor(Color.rgb(218, 180, 104))
+            setPadding(px(18), px(10), px(18), px(10))
+            setOnClickListener { pickGameZip() }
+        }
+        val folderBtn = Button(this).apply {
+            text = "Select Unpacked Folder"
+            isAllCaps = false
+            setTextColor(Color.rgb(230, 210, 165))
+            setBackgroundColor(Color.rgb(58, 50, 40))
+            setPadding(px(18), px(10), px(18), px(10))
+            setOnClickListener { pickGameFolder() }
+        }
+        buttons.addView(zipBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = px(12)
+        })
+        buttons.addView(folderBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        importButtonsRow = buttons
+
+        val status = TextView(this).apply {
+            setTextColor(Color.rgb(160, 155, 145))
+            textSize = 12f
+            setPadding(0, px(12), 0, 0)
+            text = "Or copy data, Campaigns, Maps, MapsMP, Music, Sounds, Tutorials via ADB to:\n${dir.absolutePath}"
+        }
+        importStatusView = status
+
+        card.addView(title)
+        card.addView(body)
+        card.addView(buttons)
+        card.addView(status)
+        container.addView(
+            card,
+            LinearLayout.LayoutParams(px(640).coerceAtMost(resources.displayMetrics.widthPixels - px(48)), LinearLayout.LayoutParams.WRAP_CONTENT)
+        )
+        scroll.addView(container, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        root.addView(scroll, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun pickGameZip() {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, REQ_PICK_ZIP)
+        } catch (e: Exception) {
+            Toast.makeText(this, "No file picker available: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun pickGameFolder() {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, REQ_PICK_FOLDER)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Folder picker not supported on this device: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val dir = targetInstallDir ?: return
+
+        if (requestCode != REQ_PICK_ZIP && requestCode != REQ_PICK_FOLDER) return
+
+        importButtonsRow?.visibility = android.view.View.GONE
+        importStatusView?.apply {
+            setTextColor(Color.rgb(235, 205, 140))
+            textSize = 15f
+            text = "Importing game data… 0%"
+        }
+
+        Thread({
+            try {
+                val onProg = DataInstaller.Progress { done, total ->
+                    val pct = if (total > 0) (done * 100 / total).coerceIn(0, 100) else 0
+                    runOnUiThread {
+                        importStatusView?.text = "Importing game data… $pct%"
+                    }
+                }
+                if (requestCode == REQ_PICK_ZIP) {
+                    DataInstaller.installFromZip(
+                        openZip = { contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot open selected ZIP") },
+                        dir = dir,
+                        progress = onProg
+                    )
+                } else {
+                    DataInstaller.installFromDocumentTree(contentResolver, uri, dir, onProg)
+                }
+                runOnUiThread(::recreate)
+            } catch (e: Exception) {
+                runOnUiThread {
+                    importButtonsRow?.visibility = android.view.View.VISIBLE
+                    importStatusView?.apply {
+                        setTextColor(Color.rgb(255, 140, 130))
+                        textSize = 13f
+                        text = "Import failed: ${e.message}"
+                    }
+                }
+            }
+        }, "KaMDataUserImport").start()
     }
 
     private fun hideSystemBars() {
@@ -358,5 +507,7 @@ class KaMActivity : Activity() {
     companion object {
         private const val PREFS = "kam"
         private const val PREF_UI_SCALE = "ui_scale"
+        private const val REQ_PICK_ZIP = 1001
+        private const val REQ_PICK_FOLDER = 1002
     }
 }
