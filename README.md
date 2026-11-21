@@ -28,8 +28,9 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ![2.5x Troop Direction Selector](android/docs/images/troop_direction.png)
 
-### 3. Top-Left Touch Speed & Pause Controls
+### 3. Top-Left Touch Speed, Pause & On-Screen Control Groups (`1`–`5`)
 - **One-Tap Game Speed Bar:** Always-accessible **Pause (`⏸`)** and speed buttons (**`x1`**, **`x3`**, **`x6`**, **`x10`** / mission-specific multipliers) sit right next to the game clock in the top-left corner — no `P` or `F5`–`F8` keyboard keys needed. Tapping anywhere on the pause overlay resumes play.
+- **On-Screen Control Groups Bar (`1`–`5`):** Auto-appearing bottom strip for quick army & town binding — **tap `+1`–`+5`** (or **long-press**) to bind the selected squad, citizen, or building; **tap** an assigned slot to select it; **double-tap** to center the camera on it; or **long-press** with nothing selected to clear it.
 
 ### 4. Widescreen Adaptation, Independent Scrollable Sidebar & Live UI Scaling
 - **Independent Sidebar Scaling & Vertical Scroll:** Scale the left sidebar independently (`125%` by default, up to `200%` in *Game Settings*) and **scroll it vertically by touch** whenever build grids, troop panels, or wares exceed phone height — in both Gameplay and the Map Editor.
