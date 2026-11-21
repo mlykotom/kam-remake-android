@@ -4,8 +4,12 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 TC="${KAM_TOOLCHAIN:-$(cd "$DIR/../.." && pwd)/toolchain}"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/29.0.13599879}"
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;;
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
 LIBS="$TC/android-libs"
-"$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang" --target=aarch64-linux-android26 -O2 -fPIC -shared -fvisibility=hidden \
+"$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin/clang" --target=aarch64-linux-android26 -O2 -fPIC -shared -fvisibility=hidden \
   -Wall -Wno-unused-function \
   -I"$TC/minimp3" -I"$LIBS/include" \
   -o "$LIBS/lib/libbass.so" "$DIR/bass_android.c" \

@@ -4,7 +4,12 @@
 set -uo pipefail
 ANDROID_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODE="${1:-campaigns}"
-B=$HOME/Library/Android/sdk/ndk/29.0.13599879/toolchains/llvm/prebuilt/darwin-x86_64/bin
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;;
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
+NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/29.0.13599879}"
+B="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
 LOG="$ANDROID_DIR/build/selftest_logcat.txt"
 mkdir -p "$ANDROID_DIR/build"
 adb shell am force-stop org.kamremake.android
