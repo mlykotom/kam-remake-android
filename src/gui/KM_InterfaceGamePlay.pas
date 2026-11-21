@@ -151,6 +151,7 @@ type
     function ScreenToMapCell(X, Y: Integer): TKMPoint;
     function GetHouseFootprintScreenRect(const aLoc: TKMPoint; aHouseType: TKMHouseType): TKMRect;
     function IsPreviewCellInViewport(const aLoc: TKMPoint; aHouseType: TKMHouseType): Boolean;
+    function IsPreviewFootprintVisible(const aLoc: TKMPoint; aHouseType: TKMHouseType): Boolean;
     procedure SpawnTouchHousePreviewAtCenter(aHouseType: TKMHouseType);
     procedure Replay_PlayersColorModeClick(Sender: TObject);
     function Replay_ListKeyUp(Sender: TObject; Key: Word; Shift: TShiftState): Boolean;
@@ -1688,6 +1689,18 @@ begin
 end;
 
 
+function TKMGamePlayInterface.IsPreviewFootprintVisible(const aLoc: TKMPoint; aHouseType: TKMHouseType): Boolean;
+var
+  R: TKMRect;
+begin
+  R := GetHouseFootprintScreenRect(aLoc, aHouseType);
+  Result := (R.Right > fViewport.ToolbarWidth)
+            and (R.Left < fViewport.ViewRect.Right - GetSafeInsetRight)
+            and (R.Bottom > fViewport.ViewRect.Top)
+            and (R.Top < fViewport.ViewRect.Bottom);
+end;
+
+
 procedure TKMGamePlayInterface.SpawnTouchHousePreviewAtCenter(aHouseType: TKMHouseType);
 var
   centerX, centerY: Integer;
@@ -1799,7 +1812,7 @@ begin
     fowOk := gMySpectator.Hand.NeedToChooseFirstStorehouseInGame
              or (gMySpectator.FogOfWar.CheckTileRevelation(P.X, P.Y) > 0);
 
-    if fowOk and IsPreviewCellInViewport(P, houseType)
+    if fowOk and IsPreviewFootprintVisible(P, houseType)
        and gMySpectator.Hand.CanAddHousePlan(P, houseType) then
     begin
       gGame.GameInputProcess.CmdBuild(gicBuildHousePlan, P, houseType);
@@ -1823,12 +1836,14 @@ end;
 
 procedure TKMGamePlayInterface.UpdateTouchBuildUI;
 const
-  MARGIN = 12;
+  FOOT_GAP = 12;
+  EDGE_MARGIN = 16;
 var
   houseType: TKMHouseType;
   showCancel, showConfirm, canConfirm, fowOk: Boolean;
   footRect: TKMRect;
   panelW, panelLeft, panelTop, minLeft, maxLeft, minTop, maxTop: Integer;
+  mapLeft, mapRight, mapBottom, bottomLimit, mapMinLeft, mapMaxLeft: Integer;
 begin
   if (Self = nil) or (Panel_BuildConfirm = nil) or (gGame = nil) then Exit;
 
@@ -1885,7 +1900,7 @@ begin
     fowOk := gMySpectator.Hand.NeedToChooseFirstStorehouseInGame
              or (gMySpectator.FogOfWar.CheckTileRevelation(gCursor.PreviewCell.X, gCursor.PreviewCell.Y) > 0);
     canConfirm := fowOk
-                  and IsPreviewCellInViewport(gCursor.PreviewCell, houseType)
+                  and IsPreviewFootprintVisible(gCursor.PreviewCell, houseType)
                   and gMySpectator.Hand.CanAddHousePlan(gCursor.PreviewCell, houseType);
     Button_BuildConfirm.MakesSound := canConfirm;
     Image_BuildConfirm.Enabled := canConfirm;
@@ -1893,17 +1908,34 @@ begin
 
   footRect := GetHouseFootprintScreenRect(gCursor.PreviewCell, houseType);
   panelLeft := (footRect.Left + footRect.Right - panelW) div 2;
-  panelTop := footRect.Bottom + MARGIN;
-  if panelTop + TOUCH_BUILD_BTN_H > fViewport.ViewRect.Bottom - MARGIN then
-    panelTop := footRect.Top - TOUCH_BUILD_BTN_H - MARGIN;
+  panelTop := footRect.Bottom + FOOT_GAP;
 
-  minLeft := fViewport.ToolbarWidth + MARGIN;
-  maxLeft := Max(minLeft, fViewport.ViewRect.Right - GetSafeInsetRight - panelW - MARGIN);
+  mapLeft := fViewport.MapToScreen(KMPointF(0, 0)).X;
+  mapRight := fViewport.MapToScreen(KMPointF(gTerrain.MapX - 1, 0)).X;
+  mapBottom := fViewport.MapToScreen(gTerrain.FlatToHeight(KMPointF(gCursor.PreviewCell.X, gTerrain.MapY - 1))).Y;
+
+  bottomLimit := Min(fViewport.ViewRect.Bottom - EDGE_MARGIN, mapBottom - 4);
+  if panelTop + TOUCH_BUILD_BTN_H > bottomLimit then
+    panelTop := footRect.Top - TOUCH_BUILD_BTN_H - FOOT_GAP;
+
+  minLeft := fViewport.ToolbarWidth + EDGE_MARGIN;
+  maxLeft := Max(minLeft, fViewport.ViewRect.Right - GetSafeInsetRight - panelW - EDGE_MARGIN);
+  mapMinLeft := Max(minLeft, mapLeft + 4);
+  mapMaxLeft := Min(maxLeft, mapRight - panelW - 4);
+  if mapMinLeft <= mapMaxLeft then
+  begin
+    minLeft := mapMinLeft;
+    maxLeft := mapMaxLeft;
+  end;
+
   minTop := 48;
-  maxTop := Max(minTop, fViewport.ViewRect.Bottom - TOUCH_BUILD_BTN_H - MARGIN);
+  maxTop := Max(minTop, fViewport.ViewRect.Bottom - TOUCH_BUILD_BTN_H - EDGE_MARGIN);
+  if (mapBottom - TOUCH_BUILD_BTN_H - 4 >= minTop) and (mapBottom - TOUCH_BUILD_BTN_H - 4 < maxTop) then
+    maxTop := mapBottom - TOUCH_BUILD_BTN_H - 4;
 
-  Panel_BuildConfirm.Left := EnsureRange(panelLeft, minLeft, maxLeft);
-  Panel_BuildConfirm.Top := EnsureRange(panelTop, minTop, maxTop);
+  // Panel_Main.Left is offset by GetSafeInsetLeft, while viewport/footprint coords are in screen space
+  Panel_BuildConfirm.AbsLeft := EnsureRange(panelLeft, minLeft, maxLeft);
+  Panel_BuildConfirm.AbsTop := EnsureRange(panelTop, minTop, maxTop);
   Panel_BuildConfirm.Show;
 end;
 
