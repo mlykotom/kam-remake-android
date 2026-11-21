@@ -76,7 +76,7 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ### Option A: 100% On Your Phone (Recommended — No PC Needed)
 1. Purchase ***Knights and Merchants*** on [**GOG.com**](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) right in your phone's browser and download the **GOG offline backup installer (`.exe`)** to your `Downloads` folder *(or copy your Steam/GOG `Knights and Merchants` folder or `.zip` to your device)*.
-2. Download the latest **`app-release.apk`** from [**Releases**](../../releases), install it, and open **KaM Remake**.
+2. Download the latest **`.apk`** from [**Releases**](../../releases), install it, and open **KaM Remake**.
 3. **Step 1 in the app:** Tap **Verify GOG .exe / Game .zip** (or **Verify Game Folder**) and select your purchased original game file.
 4. **Step 2 in the app:** Tap **Download & Install Remake (~679 MB)**. The app downloads the official *KaM Remake* package and extracts the game assets natively on your phone, then launches straight into the game! *(Offline? You can also select a locally downloaded `KaM-Remake-Beta-*.exe`.)*
 
@@ -85,8 +85,8 @@ If you already installed [*KaM Remake*](https://www.kamremake.com/download/) on 
 1. Compress your `KaM Remake` folder into a `.zip` (or copy the unpacked folder) to your Android device.
 2. Open **KaM Remake** and tap **Import Remake .zip** (or **Select Remake Folder**).
 
-### Option C: Developer Build from Source (macOS)
-Requirements: macOS (Apple Silicon or Intel), `brew install fpc innoextract`, Android SDK with NDK `29.0.13599879` & CMake, JDK 17+.
+### Option C: Developer Build from Source (macOS or Linux)
+Requirements: macOS (`brew install fpc innoextract`) or Linux (`apt install fpc patch bzip2` or run `android/toolchain/setup_linux_env.sh`), Android SDK with NDK `29.0.13599879` & CMake `3.22.1`, JDK 17+.
 
 ```sh
 git clone --recurse-submodules https://github.com/mlykotom/kam-remake-android.git

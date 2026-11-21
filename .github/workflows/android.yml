@@ -1,0 +1,193 @@
+name: Android Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional existing tag to attach this APK release to (leave empty for artifact-only build)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build-android:
+    name: Build arm64-v8a APK & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (with PascalScript submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            android/build.gradle
+            android/app/build.gradle
+            android/settings.gradle
+            android/gradle.properties
+
+      - name: Install host tools and Android NDK / CMake / Platform 36
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq fpc patch bzip2
+
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          NDK_VER="29.0.13599879"
+          CMAKE_VER="3.22.1"
+          NDK="$SDK/ndk/$NDK_VER"
+          SDKMANAGER="$(command -v sdkmanager 2>/dev/null || echo "$SDK/cmdline-tools/latest/bin/sdkmanager")"
+
+          (yes || true) | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null 2>&1 || true
+          PKGS=()
+          [ -d "$NDK" ] || PKGS+=("ndk;$NDK_VER")
+          [ -d "$SDK/cmake/$CMAKE_VER" ] || PKGS+=("cmake;$CMAKE_VER")
+          [ -d "$SDK/platforms/android-36" ] || PKGS+=("platforms;android-36")
+          if [ "${#PKGS[@]}" -gt 0 ]; then
+            "$SDKMANAGER" --sdk_root="$SDK" "${PKGS[@]}"
+          fi
+
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Cache aarch64-android toolchain (FPC, LazUtils, gl4es, audio, innoextract)
+        uses: actions/cache@v4
+        with:
+          path: |
+            toolchain
+            android/build/lazutils
+          key: linux-toolchain-v1-${{ hashFiles('android/toolchain/setup_toolchain.sh', 'android/toolchain/patches/**', 'android/native/build_innoextract.sh', 'android/build_lazutils.sh') }}
+
+      - name: Build / verify cross-compilation toolchain
+        run: android/toolchain/setup_toolchain.sh
+
+      - name: Prepare release signing keystore (if configured)
+        env:
+          KAM_KEYSTORE_BASE64: ${{ secrets.KAM_KEYSTORE_BASE64 }}
+          KAM_KEYSTORE_PASSWORD: ${{ secrets.KAM_KEYSTORE_PASSWORD }}
+          KAM_KEY_ALIAS: ${{ secrets.KAM_KEY_ALIAS }}
+          KAM_KEY_PASSWORD: ${{ secrets.KAM_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KAM_KEYSTORE_BASE64}" ] && [ -n "${KAM_KEYSTORE_PASSWORD}" ] && [ -n "${KAM_KEY_ALIAS}" ] && [ -n "${KAM_KEY_PASSWORD}" ]; then
+            echo "${KAM_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/kam-release.jks"
+            echo "KAM_KEYSTORE_FILE=${RUNNER_TEMP}/kam-release.jks" >> "$GITHUB_ENV"
+            echo "SIGNED_RELEASE=true" >> "$GITHUB_ENV"
+            echo "Release keystore configured."
+          else
+            echo "SIGNED_RELEASE=false" >> "$GITHUB_ENV"
+            echo "::warning::KAM_KEYSTORE_* secrets are not set; APK will use debug signing fallback. Add KAM_KEYSTORE_BASE64, KAM_KEYSTORE_PASSWORD, KAM_KEY_ALIAS, and KAM_KEY_PASSWORD in repository Secrets for production releases."
+          fi
+
+      - name: Determine version metadata
+        run: |
+          set -euo pipefail
+          REV="$(grep -oE '[0-9]+' KM_Revision.inc | head -1 || echo 'unknown')"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VER_NAME="${TAG#v}"
+            APK_LABEL="${TAG}"
+          elif [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+            VER_NAME="${TAG#v}"
+            APK_LABEL="${TAG}"
+          else
+            SHORT_SHA="${GITHUB_SHA::7}"
+            VER_NAME="dev-r${REV}-${SHORT_SHA}"
+            APK_LABEL="r${REV}-${SHORT_SHA}"
+          fi
+          echo "KAM_VERSION_NAME=${VER_NAME}" >> "$GITHUB_ENV"
+          echo "KAM_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "APK_LABEL=${APK_LABEL}" >> "$GITHUB_ENV"
+          echo "Building versionName=${VER_NAME} versionCode=${GITHUB_RUN_NUMBER}"
+
+      - name: Build engine-only Release APK (~25 MB)
+        env:
+          KAM_BUILD_TYPE: Release
+          KAM_BUNDLE_DATA: '0'
+          KAM_KEYSTORE_PASSWORD: ${{ secrets.KAM_KEYSTORE_PASSWORD }}
+          KAM_KEY_ALIAS: ${{ secrets.KAM_KEY_ALIAS }}
+          KAM_KEY_PASSWORD: ${{ secrets.KAM_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd android
+          ./build_apk.sh
+
+      - name: Run Android Kotlin unit tests
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew testDebugUnitTest
+
+      - name: Package & verify engine-only APK artifact
+        run: |
+          set -euo pipefail
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          [ -f "$APK_SRC" ] || { echo "Missing built APK at $APK_SRC" >&2; exit 1; }
+
+          # Guardrail: refuse to upload if copyrighted game data was accidentally bundled
+          SIZE_BYTES="$(stat -c %s "$APK_SRC")"
+          SIZE_MB=$((SIZE_BYTES / 1048576))
+          echo "Built APK size: ${SIZE_MB} MB (${SIZE_BYTES} bytes)"
+          if [ "$SIZE_MB" -ge 60 ]; then
+            echo "ERROR: APK size (${SIZE_MB} MB) exceeds 60 MB engine-only limit!" >&2
+            exit 1
+          fi
+
+          mkdir -p dist
+          APK_OUT="dist/KaM-Remake-Android-${APK_LABEL}.apk"
+          cp "$APK_SRC" "$APK_OUT"
+          (cd dist && sha256sum "$(basename "$APK_OUT")" > "$(basename "$APK_OUT").sha256")
+          ls -lh dist/
+
+      - name: Clean up temporary keystore
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/kam-release.jks"
+
+      - name: Upload APK build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KaM-Remake-Android-${{ env.APK_LABEL }}
+          path: dist/*
+          retention-days: 30
+
+      - name: Publish GitHub Release (on v* tags or manual release_tag)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+          name: KaM Remake for Android ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+          generate_release_notes: true
+          body: |
+            Engine-only **ARM64 (`arm64-v8a`)** Android build of **KaM Remake**.
+            No copyrighted *Knights and Merchants* assets are included in this APK.
+
+            ### How to Install
+            1. Install `KaM-Remake-Android-${{ env.APK_LABEL }}.apk` on your Android device (Android 8.0+ / `arm64-v8a`).
+            2. Own ***Knights and Merchants*** on [GOG.com](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) or [Steam](https://store.steampowered.com/app/253900/Knights_and_Merchants/).
+            3. Open **KaM Remake** and follow the built-in **Game Data Setup** wizard (verify your GOG offline `.exe` or Steam/GOG folder, then tap **Download & Install Remake** — or import an existing PC `KaM Remake` `.zip`/folder).
+
+            ${{ env.SIGNED_RELEASE == 'true' && 'Signed with the official release key.' || '> **Note:** This build was signed with the fallback debug key because `KAM_KEYSTORE_*` repository secrets were not configured.' }}
+          files: |
+            dist/KaM-Remake-Android-*.apk
+            dist/KaM-Remake-Android-*.apk.sha256

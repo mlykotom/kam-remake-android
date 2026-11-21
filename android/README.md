@@ -59,6 +59,7 @@ The APK is in `android/app/build/outputs/apk/<debug|release>/`.
 - **APK without data** (default, safe to redistribute): on first launch, the **Game Data Setup** screen lets users verify their original *Knights and Merchants* game (GOG `.exe`, Steam `.zip`, or folder) and download + extract the official *KaM Remake* package directly on-device via embedded `libinnoextract_jni.so` — or import an existing `.zip` / folder. Developers can also push directly via `ANDROID_SERIAL=<device> ./push_data.sh` (to `/sdcard/Android/data/org.kamremake.android/files/`).
 - **APK with data** (`KAM_BUNDLE_DATA=1`, personal use only — contains copyrighted assets): install and start, it unpacks the data once (~1 minute).
 - **Release signing**: set `KAM_KEYSTORE_FILE`, `KAM_KEYSTORE_PASSWORD`, `KAM_KEY_ALIAS`, and `KAM_KEY_PASSWORD` before running `KAM_BUILD_TYPE=Release ./build_apk.sh` (falls back to debug signing when unset).
+- **GitHub Actions CI & Releases** (`.github/workflows/android.yml`): builds the engine-only Release APK and runs Kotlin unit tests on `ubuntu-latest` for every push/PR to `main`, and automatically publishes signed APKs + SHA-256 checksums to GitHub Releases on `v*` tags (or manual `workflow_dispatch`) when `KAM_KEYSTORE_BASE64`, `KAM_KEYSTORE_PASSWORD`, `KAM_KEY_ALIAS`, and `KAM_KEY_PASSWORD` secrets are configured.
 
 Options: `KAM_MULTIPLAYER=1` shows the Multiplayer menu (hidden by default, not finished on Android);
 `KAM_FPC_FLAGS=-dANDROID_GLDEBUG` / `-dANDROID_MEMDEBUG` add GL and memory diagnostics.
