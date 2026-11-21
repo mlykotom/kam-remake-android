@@ -33,13 +33,18 @@ for p in rtl-objpas rtl-generics rtl-extra fcl-image fcl-base fcl-json fcl-xml f
   FU+=(-Fu"$FPC_SRC/packages/$p/units/aarch64-android")
 done
 
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;;
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
+
 "$FPC_SRC/compiler/ppcrossa64" -Tandroid -Paarch64 -Cg -Xd -MDelphi -Sh -Sa \
   -dANDROID_PORT -dDBG_SKIP_SECURE_AUTH \
   -XPaarch64-linux-android- \
   -Fu"$FPC_SRC/rtl/units/aarch64-android" \
   -Fi"$REPO" "${FU[@]}" \
   -FU"$UNITS" -FE"$OUT" -o"$OUT/libkamcore.so" \
-  -Fl"$NDK/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/26" \
+  -Fl"$NDK/toolchains/llvm/prebuilt/$HOST_TAG/sysroot/usr/lib/aarch64-linux-android/26" \
   -Fl"$TC/android-libs/lib" \
   -k-z -kmax-page-size=16384 \
   -O2 -g -gl -vewn -vm5023,5024,5025,5026,5027,5028,5057,5058,5059,5060,5089,5090,5091,5092,5093,6058,3123,3124,4055,4056,4079,4080,4081,4082,5036,5037,4035,4105,4104 \

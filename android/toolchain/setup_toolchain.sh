@@ -14,7 +14,10 @@ TC="${KAM_TOOLCHAIN:-$REPO/toolchain}"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK="${ANDROID_NDK_HOME:-$SDK/ndk/29.0.13599879}"
 CM_BIN="$(ls -d "$SDK"/cmake/*/bin | sort -V | tail -1)"
-HOST_TAG=darwin-x86_64 # NDK ships universal binaries under this name on macOS
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;; # NDK ships universal binaries under this name on macOS
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
 PATCHES="$HERE/patches"
 JOBS="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
 
@@ -26,7 +29,7 @@ OPENAL_TAG=1.24.3
 OGG_TAG=v1.3.5
 VORBIS_TAG=v1.3.7
 
-command -v fpc >/dev/null || { echo "Host Free Pascal (fpc 3.2.2) is required: brew install fpc"; exit 1; }
+command -v fpc >/dev/null || { echo "Host Free Pascal (fpc 3.2.2) is required: brew install fpc (macOS) or apt install fpc (Linux)"; exit 1; }
 [ -d "$NDK" ] || { echo "Android NDK not found at $NDK"; exit 1; }
 mkdir -p "$TC" "$TC/bin"
 echo "Toolchain dir: $TC"
@@ -39,7 +42,8 @@ cat > "$TC/bin/aarch64-linux-android-as" <<'PY'
 # GNU as compatible front-end for FPC: assembles with the NDK clang
 import os, sys
 ndk = os.environ['KAM_NDK']
-cmd = [ndk + '/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang', '--target=aarch64-linux-android26', '-c', '-x', 'assembler']
+host_tag = 'darwin-x86_64' if sys.platform == 'darwin' else 'linux-x86_64'
+cmd = [ndk + '/toolchains/llvm/prebuilt/' + host_tag + '/bin/clang', '--target=aarch64-linux-android26', '-c', '-x', 'assembler']
 a = iter(sys.argv[1:])
 for x in a:
     if x == '--defsym': cmd.append('-Wa,-defsym,' + next(a))

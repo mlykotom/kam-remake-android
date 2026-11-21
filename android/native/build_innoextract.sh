@@ -8,7 +8,11 @@ TC="${KAM_TOOLCHAIN:-$REPO/toolchain}"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK="${ANDROID_NDK_HOME:-$SDK/ndk/29.0.13599879}"
 CM_BIN="$(ls -d "$SDK"/cmake/*/bin | sort -V | tail -1)"
-LLVM="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;;
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
+LLVM="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
 CC="$LLVM/clang"
 CXX="$LLVM/clang++"
 AR="$LLVM/llvm-ar"
@@ -70,11 +74,17 @@ if [ ! -f "$LIBS/lib/libboost_inno.a" ] || [ ! -d "$TC/boost/boost" ]; then
   for f in "$TC/boost/libs/filesystem/src"/*.cpp; do
     BOOST_SRCS+=("$f")
   done
+  active=0
   for src in "${BOOST_SRCS[@]}"; do
     obj="$TC/build-boost-inno/$(basename "${src%.cpp}").o"
     "$CXX" --target=aarch64-linux-android26 -std=c++17 -O2 -fPIC -fvisibility=hidden \
       -DBOOST_ALL_NO_LIB=1 -DBOOST_SYSTEM_NO_DEPRECATED=1 -DBOOST_FILESYSTEM_NO_CXX20_ATOMIC_REF=1 \
       -I"$TC/boost" -I"$LIBS/include" -c "$src" -o "$obj" &
+    active=$((active + 1))
+    if [ "$active" -ge "$JOBS" ]; then
+      wait
+      active=0
+    fi
   done
   wait
   "$AR" rcs "$LIBS/lib/libboost_inno.a" "$TC/build-boost-inno"/*.o
@@ -90,6 +100,10 @@ if [ ! -d "$TC/innoextract/src" ]; then
 fi
 
 # 5. Compile innoextract + JNI bridge -> libinnoextract_jni.so
+if [ "${KAM_FORCE_INNOEXTRACT:-0}" != 1 ] && [ -f "$LIBS/lib/libinnoextract_jni.so" ] && [ "$LIBS/lib/libinnoextract_jni.so" -nt "$DIR/innoextract_jni.cpp" ]; then
+  echo "up to date: $LIBS/lib/libinnoextract_jni.so"
+  exit 0
+fi
 BUILD_INNO="$TC/build-innoextract"
 rm -rf "$BUILD_INNO"
 mkdir -p "$BUILD_INNO/gen"

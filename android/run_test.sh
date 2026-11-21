@@ -3,7 +3,12 @@
 set -uo pipefail
 ANDROID_DIR="$(cd "$(dirname "$0")" && pwd)"
 export ANDROID_SERIAL="${ANDROID_SERIAL:-R58R74Z20BJ}"
-B=$HOME/Library/Android/sdk/ndk/29.0.13599879/toolchains/llvm/prebuilt/darwin-x86_64/bin
+case "$(uname -s)" in
+  Darwin) HOST_TAG=darwin-x86_64 ;;
+  *)      HOST_TAG=linux-x86_64 ;;
+esac
+NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/29.0.13599879}"
+B="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
 if [ "${NOBUILD:-0}" != 1 ]; then
   "$ANDROID_DIR/build_apk.sh" > "$ANDROID_DIR/build/apk.log" 2>&1 || { grep -E "Error|error:|FAIL" "$ANDROID_DIR/build/apk.log" | head -20; exit 1; }
   adb install -r "$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk" | tail -1
