@@ -2,7 +2,7 @@
 # Build (unless NOBUILD=1), install, launch and collect engine logs; symbolizes KaMCrash stacks
 set -uo pipefail
 ANDROID_DIR="$(cd "$(dirname "$0")" && pwd)"
-export ANDROID_SERIAL="${ANDROID_SERIAL:-R58R74Z20BJ}"
+[ -n "${ANDROID_SERIAL:-}" ] && export ANDROID_SERIAL
 case "$(uname -s)" in
   Darwin) HOST_TAG=darwin-x86_64 ;;
   *)      HOST_TAG=linux-x86_64 ;;

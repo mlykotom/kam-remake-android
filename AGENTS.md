@@ -4,7 +4,7 @@ This repository is the native Android (`arm64` / `aarch64-android`) port of **Ka
 
 ## 1. Android CLI (`android`) & Device Workflows
 
-When working on Android tasks, always prefer the **`android` CLI** (`android`) and consult the `android-cli` and `android-device-hub` skills.
+When working on Android tasks, always prefer the **`android` CLI** (`android`, typically in `$HOME/.local/bin/android`) and consult the `android-cli` and `android-device-hub` skills.
 
 - **Emulators (AVDs)**:
   - Check existing/running devices first: `android info`, `android emulator list`, or `adb devices`
@@ -33,7 +33,7 @@ See [`android/README.md`](android/README.md) for full architecture and build det
   - To compile only `libkamcore.so`: `./android/build_native.sh`
   - If `libkamcore.so` and JNI libs are already in `android/app/src/main/jniLibs/arm64-v8a/`, package the debug APK in ~10s via `cd android && ./gradlew assembleDebug` and test with `NOBUILD=1 ANDROID_SERIAL=<device> ./run_test.sh`.
 - **Game Data (`KAM_DATA`) & Android 14/15 Scoped Storage**:
-  - Local extracted game assets live at `<path/to/kam_remake_assets/app>`. Pass `KAM_DATA=<path/to/kam_remake_assets/app>` to `push_data.sh` or `build_apk.sh`.
+  - Pass `KAM_DATA=<path/to/kam_remake_assets/app>` (or let scripts default to `$KAM_TOOLCHAIN/kamres/app`) to `push_data.sh` or `build_apk.sh`.
   - Push Game Data: `cd android && KAM_DATA=<path/to/kam_remake_assets/app> ANDROID_SERIAL=<device> ./push_data.sh`
   - On Android 14/15 (`targetSdkVersion 35`), `adb push` creates subdirectories in `/sdcard/Android/data/org.kamremake.android/files` owned by `shell:ext_data_rw` (`0770`), which the app UID (`u0_a*`) cannot traverse (causing *"Game data not found"*). On an emulator, fix ownership after pushing: `adb -s <device> root && adb -s <device> shell "chown -R \$(stat -c %U /data/media/0/Android/data/org.kamremake.android/files):ext_data_rw /data/media/0/Android/data/org.kamremake.android/files" && adb -s <device> unroot`.
 - **Run & Collect Symbolized Logs**: `cd android && ANDROID_SERIAL=<device> ./run_test.sh` (engine logs are also written on-device to `/sdcard/Android/data/org.kamremake.android/files/Logs/`)
