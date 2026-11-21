@@ -198,6 +198,15 @@ type
     function HandleSpectatorKeys(Key: Word; Shift: TShiftState): Boolean;
     procedure HandleFieldPlanKeys(Key: Word);
     procedure HandleDebugKeys(Key: Word);
+
+    function GetTouchMagnetRadiusTiles: Single;
+    function IsEntitySelectableBySpectator(aEntity: TKMHandEntity): Boolean;
+    function IsMagnetSelectableUnitUID(aUID: Integer): Boolean;
+    function IsMagnetJoinableWarriorUID(aUID: Integer): Boolean;
+    function IsMagnetEnemyUnitUID(aUID: Integer): Boolean;
+    function FindTouchMagnetJoinWarrior: TKMUnit;
+    function FindTouchMagnetEnemyUnit: TKMUnit;
+    procedure ApplyTouchSelectionMagnet(const aCell: TKMPoint);
   protected
     Panel_Sidebar: TKMPanel;
     Sidebar_Top: TKMImage;
@@ -1616,6 +1625,169 @@ begin
   F := CursorToMapCoord(X, Y);
   Result.X := EnsureRange(Round(F.X + 0.5), 1, gTerrain.MapX - 1);
   Result.Y := EnsureRange(Round(F.Y + 0.5), 1, gTerrain.MapY - 1);
+end;
+
+
+const
+  TOUCH_MAGNET_RADIUS_PX = 28;  // Screen-space magnet radius (virtual px) around unit SelectionRect
+  TOUCH_MAGNET_MAX_TILES = 2.5; // Cap tile radius at extreme zoom-out
+
+
+function TKMGamePlayInterface.GetTouchMagnetRadiusTiles: Single;
+begin
+  if not PlatformIsTouchMode or (fViewport = nil) or (fViewport.Zoom <= 0) then
+    Exit(0);
+  Result := Min(TOUCH_MAGNET_RADIUS_PX / (CELL_SIZE_PX * fViewport.Zoom), TOUCH_MAGNET_MAX_TILES);
+end;
+
+
+function TKMGamePlayInterface.IsEntitySelectableBySpectator(aEntity: TKMHandEntity): Boolean;
+begin
+  Result := (aEntity <> nil)
+            and (aEntity.Owner <> -1)
+            and (gMySpectator <> nil)
+            and ((aEntity.Owner = gMySpectator.HandID)
+                 or DBG_ALLOW_SELECT_ALL
+                 or ((gMySpectator.Hand <> nil)
+                     and aEntity.AllowAllyToSelect
+                     and (gMySpectator.Hand.Alliances[aEntity.Owner] = atAlly))
+                 or (fUIMode in [umReplay, umSpectate]));
+end;
+
+
+function TKMGamePlayInterface.IsMagnetSelectableUnitUID(aUID: Integer): Boolean;
+var
+  U: TKMUnit;
+  G: TKMUnitGroup;
+begin
+  Result := False;
+  U := gHands.GetUnitByUID(aUID);
+  if (U = nil) or U.IsDeadOrDying or (U is TKMUnitAnimal) then Exit;
+  if not IsEntitySelectableBySpectator(U) then Exit;
+
+  if U is TKMUnitWarrior then
+  begin
+    if fUIMode in [umReplay, umSpectate] then
+      G := gHands.GetGroupByMember(TKMUnitWarrior(U))
+    else
+      G := gHands[U.Owner].UnitGroups.GetGroupByMember(TKMUnitWarrior(U));
+    if (G = nil) or G.IsDead or not IsEntitySelectableBySpectator(G) then Exit;
+    // Skip the already-selected squad so tapping nearby ground preserves double-tap walk orders
+    if G = gMySpectator.Selected then Exit;
+    Result := True;
+  end
+  else
+  begin
+    if U = gMySpectator.Selected then Exit;
+    Result := True;
+  end;
+end;
+
+
+function TKMGamePlayInterface.IsMagnetJoinableWarriorUID(aUID: Integer): Boolean;
+var
+  U: TKMUnit;
+  selGroup: TKMUnitGroup;
+begin
+  Result := False;
+  if (gMySpectator = nil) or not (gMySpectator.Selected is TKMUnitGroup) then Exit;
+  selGroup := TKMUnitGroup(gMySpectator.Selected);
+  U := gHands.GetUnitByUID(aUID);
+  if (U = nil) or not (U is TKMUnitWarrior) or U.IsDeadOrDying then Exit;
+  Result := (U.Owner = gMySpectator.HandID)
+            and not selGroup.HasMember(TKMUnitWarrior(U))
+            and (UNIT_TO_GROUP_TYPE[TKMUnitWarrior(U).UnitType] = selGroup.GroupType)
+            and (gMySpectator.Hand <> nil)
+            and (gMySpectator.Hand.UnitGroups.GetGroupByMember(TKMUnitWarrior(U)) <> nil);
+end;
+
+
+function TKMGamePlayInterface.IsMagnetEnemyUnitUID(aUID: Integer): Boolean;
+var
+  U: TKMUnit;
+begin
+  U := gHands.GetUnitByUID(aUID);
+  Result := (U <> nil)
+            and not U.IsDeadOrDying
+            and not (U is TKMUnitAnimal)
+            and (gMySpectator <> nil)
+            and (gMySpectator.Hand <> nil)
+            and (gMySpectator.Hand.Alliances[U.Owner] = atEnemy);
+end;
+
+
+function TKMGamePlayInterface.FindTouchMagnetJoinWarrior: TKMUnit;
+var
+  rad, bestDistSq: Single;
+  uid: Integer;
+begin
+  Result := nil;
+  rad := GetTouchMagnetRadiusTiles;
+  if (rad <= 0) or (gRenderPool = nil) then Exit;
+  uid := gRenderPool.RenderList.GetNearestSelectionUID(gCursor.Float, rad, IsMagnetJoinableWarriorUID, bestDistSq);
+  if uid > 0 then
+    Result := gHands.GetUnitByUID(uid);
+end;
+
+
+
+function TKMGamePlayInterface.FindTouchMagnetEnemyUnit: TKMUnit;
+var
+  rad, bestDistSq: Single;
+  uid: Integer;
+begin
+  Result := nil;
+  rad := GetTouchMagnetRadiusTiles;
+  if (rad <= 0) or (gRenderPool = nil) then Exit;
+  uid := gRenderPool.RenderList.GetNearestSelectionUID(gCursor.Float, rad, IsMagnetEnemyUnitUID, bestDistSq);
+  if uid > 0 then
+    Result := gHands.GetUnitByUID(uid);
+end;
+
+
+procedure TKMGamePlayInterface.ApplyTouchSelectionMagnet(const aCell: TKMPoint);
+var
+  rad, friendlyDistSq, enemyDistSq: Single;
+  exactUnit: TKMUnit;
+  exactHouse: TKMHouse;
+  friendlyUID, enemyUID: Integer;
+begin
+  rad := GetTouchMagnetRadiusTiles;
+  if (rad <= 0) or (gRenderPool = nil) or (gMySpectator = nil) then Exit;
+
+  // Keep exact unit hit if it is already selectable (including selecting a specific member of the current squad)
+  exactUnit := gHands.GetUnitByUID(gCursor.ObjectUID);
+  if (exactUnit <> nil) and not exactUnit.IsDeadOrDying and not (exactUnit is TKMUnitAnimal)
+     and IsEntitySelectableBySpectator(exactUnit) then
+  begin
+    if not (exactUnit is TKMUnitWarrior)
+       or (gHands.GetGroupByMember(TKMUnitWarrior(exactUnit)) <> nil) then
+      Exit;
+  end;
+
+  // Keep exact house hit (own/ally house to select, or enemy house when commanding troops so double-tap attack works)
+  exactHouse := gHands.HousesHitTest(aCell.X, aCell.Y);
+  if (exactHouse <> nil) and not exactHouse.IsDestroyed then
+  begin
+    if IsEntitySelectableBySpectator(exactHouse) then
+      Exit;
+    if (gMySpectator.Selected is TKMUnitGroup) and gMySpectator.IsSelectedMyObj
+       and (gMySpectator.Hand <> nil) and (gMySpectator.Hand.Alliances[exactHouse.Owner] = atEnemy) then
+      Exit;
+  end;
+
+  friendlyUID := gRenderPool.RenderList.GetNearestSelectionUID(gCursor.Float, rad, IsMagnetSelectableUnitUID, friendlyDistSq);
+  if friendlyUID <= 0 then Exit;
+
+  // When commanding own troops, don't hijack the 1st tap of a double-tap attack if an enemy unit is closer
+  if (gMySpectator.Selected is TKMUnitGroup) and gMySpectator.IsSelectedMyObj and (fUIMode in [umSP, umMP]) then
+  begin
+    enemyUID := gRenderPool.RenderList.GetNearestSelectionUID(gCursor.Float, rad, IsMagnetEnemyUnitUID, enemyDistSq);
+    if (enemyUID > 0) and (enemyDistSq <= friendlyDistSq) then
+      Exit;
+  end;
+
+  gCursor.ObjectUID := friendlyUID;
 end;
 
 
@@ -4393,7 +4565,7 @@ begin
         DirectionCursorShow(X, Y, fSelectedDirection);
         gSystem.Cursor := kmcInvisible;
       end
-      else
+      else if FindTouchMagnetEnemyUnit = nil then
         gSoundPlayer.Play(sfxCantPlace, gCursor.Cell, False, 4);
     end;
   end;
@@ -4523,6 +4695,12 @@ begin
   if fGuiGameUnit.JoiningGroups and (gMySpectator.Selected is TKMUnitGroup) then
   begin
     group := TKMUnitGroup(gMySpectator.Selected);
+    if not ((entity <> nil)
+            and (entity is TKMUnitWarrior)
+            and (entity.Owner = gMySpectator.HandID)
+            and not group.HasMember(TKMUnitWarrior(entity))
+            and (UNIT_TO_GROUP_TYPE[TKMUnitWarrior(entity).UnitType] = group.GroupType)) then
+      entity := FindTouchMagnetJoinWarrior;
     if (entity <> nil)
     and (entity is TKMUnitWarrior)
     and (entity.Owner = gMySpectator.HandID)
@@ -4572,6 +4750,7 @@ var
   P, P2: TKMPoint;
   pbj: TObject;
   H: TKMHouse;
+  magnetEnemy: TKMUnit;
   group, group2: TKMUnitGroup;
   oldSelected: TKMHandEntity;
   oldSelectedUnit: TKMUnitWarrior;
@@ -4611,6 +4790,12 @@ begin
         begin
           group := TKMUnitGroup(gMySpectator.Selected);
           pbj := gMySpectator.HitTestCursor;
+          if not ((pbj <> nil)
+                  and (pbj is TKMUnitWarrior)
+                  and (TKMUnitWarrior(pbj).Owner = gMySpectator.HandID)
+                  and not group.HasMember(TKMUnitWarrior(pbj))
+                  and (UNIT_TO_GROUP_TYPE[TKMUnitWarrior(pbj).UnitType] = group.GroupType)) then
+            pbj := FindTouchMagnetJoinWarrior;
 
           if (pbj <> nil)
             and (pbj is TKMUnitWarrior)
@@ -4641,8 +4826,12 @@ begin
         if (gCursor.Mode <> cmNone) and gGameParams.IsReplayOrSpectate then
           Exit;
 
+        if (gCursor.Mode = cmNone) and not gMySpectator.Hand.InCinematic then
+          ApplyTouchSelectionMagnet(P);
+
         // Only allow placing of roads etc. with the left mouse button
-        if gMySpectator.FogOfWar.CheckTileRevelation(P.X, P.Y) = 0 then
+        if (gMySpectator.FogOfWar.CheckTileRevelation(P.X, P.Y) = 0)
+           and not ((gCursor.Mode = cmNone) and (gCursor.ObjectUID > 0)) then
         begin
           if (gCursor.Mode in [cmErase, cmRoad, cmField, cmWine, cmHouses]) and not gGameParams.IsReplayOrSpectate then
             // Can't place noise when clicking on unexplored areas
@@ -4797,9 +4986,19 @@ begin
           // Attack or Walk
           if group.CanTakePlayerOrders and (group.Owner = gMySpectator.HandID) then
           begin
-            // Try to Attack unit
+            // Try to Attack unit (or nearest enemy within touch magnet radius on stationary right-click)
             pbj := gMySpectator.HitTestCursor;
+            if not (((pbj is TKMUnit) and (gMySpectator.Hand.Alliances[TKMUnit(pbj).Owner] = atEnemy))
+                    or ((pbj is TKMHouse) and (gMySpectator.Hand.Alliances[TKMHouse(pbj).Owner] = atEnemy)))
+               and ((not fSelectingTroopDirection)
+                    or ((X = fSelectingDirPosition.X) and (Y = fSelectingDirPosition.Y) and (fSelectedDirection = dirNA))) then
+            begin
+              magnetEnemy := FindTouchMagnetEnemyUnit;
+              if magnetEnemy <> nil then
+                pbj := magnetEnemy;
+            end;
             if (pbj is TKMUnit) and (gMySpectator.Hand.Alliances[TKMUnit(pbj).Owner] = atEnemy) then
+
             begin
               gGame.GameInputProcess.CmdArmy(gicArmyAttackUnit, group, TKMUnit(pbj));
               gSoundPlayer.PlayWarrior(group.UnitType, spAttack);

@@ -24,6 +24,8 @@ type
     SelectionRect: TKMRectF; // Used for selecting units by sprite
   end;
 
+  TKMUnitUIDFilter = function(aUID: Integer): Boolean of object;
+
   // List of sprites prepared to be rendered
   TKMRenderList = class
   private
@@ -48,6 +50,8 @@ type
     property DbgSpritesDrawn: Word read fDbgSpritesDrawn;
 
     function GetSelectionUID(const aCurPos: TKMPointF): Integer;
+    function GetNearestSelectionUID(const aCurPos: TKMPointF; aMaxDistTiles: Single;
+      aFilter: TKMUnitUIDFilter; out aBestDistSq: Single): Integer;
     procedure Clear;
     procedure SortRenderList;
     procedure Render;
@@ -1974,6 +1978,59 @@ begin
       Exit(fRenderList[K].UID);
   end;
 end;
+
+
+function TKMRenderList.GetNearestSelectionUID(const aCurPos: TKMPointF; aMaxDistTiles: Single;
+  aFilter: TKMUnitUIDFilter; out aBestDistSq: Single): Integer;
+var
+  I, K, uid: Integer;
+  r: TKMRectF;
+  dx, dy, distSq, maxDistSq: Single;
+begin
+  Result := -1;
+  aBestDistSq := 0;
+  if aMaxDistTiles <= 0 then Exit;
+
+  maxDistSq := Sqr(aMaxDistTiles);
+  aBestDistSq := maxDistSq + 1;
+
+  // Iterate high..low Z-order so frontmost sprite wins ties (consistent with GetSelectionUID)
+  for I := Length(fRenderOrder) - 1 downto 0 do
+  begin
+    K := fRenderOrder[I];
+    uid := fRenderList[K].UID;
+    if uid <= 0 then Continue;
+
+    r := fRenderList[K].SelectionRect;
+    if aCurPos.X < r.Left then
+      dx := r.Left - aCurPos.X
+    else if aCurPos.X > r.Right then
+      dx := aCurPos.X - r.Right
+    else
+      dx := 0;
+    if dx > aMaxDistTiles then Continue;
+
+    if aCurPos.Y < r.Top then
+      dy := r.Top - aCurPos.Y
+    else if aCurPos.Y > r.Bottom then
+      dy := aCurPos.Y - r.Bottom
+    else
+      dy := 0;
+    if dy > aMaxDistTiles then Continue;
+
+    distSq := dx * dx + dy * dy;
+    if distSq > maxDistSq then Continue;
+    if distSq >= aBestDistSq then Continue;
+
+    if gMySpectator.FogOfWar.CheckRevelation(fRenderList[K].Feet) <= FOG_OF_WAR_MIN then Continue;
+    if Assigned(aFilter) and not aFilter(uid) then Continue;
+
+    aBestDistSq := distSq;
+    Result := uid;
+    if distSq = 0 then Exit;
+  end;
+end;
+
 
 
 procedure TKMRenderList.Clear;
