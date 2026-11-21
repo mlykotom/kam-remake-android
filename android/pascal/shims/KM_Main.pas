@@ -101,7 +101,7 @@ uses
   KM_ResTexts, KM_KeysSettings, KM_Music,
   KM_Log, KM_CommonUtils, KM_Points,
   KM_CommonExceptions, KM_MapTypes, KM_GameSettings,
-  KMAndroidHost, KMAndroidLog;
+  KM_AndroidSelfTest, KMAndroidHost, KMAndroidLog;
 
 
 {$OVERFLOWCHECKS OFF}
@@ -269,12 +269,26 @@ end;
 procedure TKMMain.AppPause;
 begin
   gHostAppActive := False;
-  // Pause single player game when app goes to background
+  // Pause and auto-save active single player game when app goes to background
   if (gGameApp <> nil) and (gGameApp.Game <> nil)
-  and not gGameApp.Game.Params.IsMultiPlayerOrSpec
-  and not gGameApp.Game.Params.IsMapEditor
+  and gGameApp.Game.IsStarted
+  and not gGameApp.Game.IsExiting
+  and not gGameApp.Game.ReadyToStop
+  and (gGameApp.Game.Params.Mode in [gmSingle, gmCampaign])
   and not gGameApp.Game.Params.IsReplay then
+  begin
     gGameApp.Game.IsPaused := True;
+    if not SelfTestActive
+    and (gGameApp.Game.GameResult in [grCancel, grGameContinues]) then
+    begin
+      try
+        gGameApp.Game.SaveAndWait(AUTOSAVE_SUSPEND_SAVE_NAME);
+      except
+        on E: Exception do
+          ALog('Auto-saving game on pause failed: ' + E.Message);
+      end;
+    end;
+  end;
 
   if gMusic <> nil then
     gMusic.Pause;

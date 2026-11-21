@@ -1410,8 +1410,11 @@ begin
     end, 'AutoSaveRename');
   {$ELSE}
     DoAutoSaveRename(fParams.IsMultiPlayerOrSpec);
+    if not fParams.IsMultiPlayerOrSpec then
+      gGameSettings.MenuSPSaveFileName := AUTOSAVE_SAVE_NAME + '01';
   {$ENDIF}
 end;
+
 
 
 procedure TKMGame.SaveMapEditor(const aPathName: UnicodeString);
@@ -2394,7 +2397,9 @@ begin
 
     saveByPlayer :=     (aSaveName <> AUTOSAVE_SAVE_NAME)
                     and (aSaveName <> AUTOSAVE_AFTER_PT_END_SAVE_NAME)
+                    and (aSaveName <> AUTOSAVE_SUSPEND_SAVE_NAME)
                     and (aSaveName <> RETURN_TO_LOBBY_SAVE);
+
     SaveGameToFile(fullPath, saveByPlayer, aSaveWorkerThread, aTimestamp, mpLocalDataPath);
 
     if not fParams.IsMultiPlayerOrSpec then

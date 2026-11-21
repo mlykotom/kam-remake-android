@@ -331,7 +331,9 @@ const
   BASESAVE_NAME = 'basesave';
   AUTOSAVE_SAVE_NAME = 'autosave';
   AUTOSAVE_AFTER_PT_END_SAVE_NAME = 'autosave_after_pt_end';
+  AUTOSAVE_SUSPEND_SAVE_NAME = 'autosave_suspend';
   CRASHREPORT_SAVE_NAME = 'crashreport';
+
 
   // Checkpoint, which are made in the memory while watching replay
   REPLAY_SAVEPOINT_FREQUENCY_MIN = 30*10; //30 sec

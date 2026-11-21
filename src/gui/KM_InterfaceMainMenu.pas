@@ -143,7 +143,9 @@ begin
   fMenuCampaign.OnNewCampaignMap    := aOnNewCampaignMap;
   fMenuMapEditor.OnNewMapEditor     := aOnNewMapEditor;
   fMenuReplays.OnNewReplay          := aOnNewReplay;
+  fMenuMain.OnNewSingleSave         := aOnNewSingleSave;
   fMenuLoad.OnNewSingleSave         := aOnNewSingleSave;
+
 
   fMenuOptions.GUICommonOptions.OnToggleLocale         := aOnToggleLocale;
   fMenuOptions.GUICommonOptions.OnPreloadGameResources := aOnPreloadGameResources;

@@ -531,10 +531,7 @@ class KaMActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        view?.let { v ->
-            if (engineRunning) v.queueEvent(KaMNative::pause)
-            v.onPause()
-        }
+        view?.pauseAndWait(if (engineRunning) Runnable(KaMNative::pause) else null)
     }
 
     override fun onResume() {
