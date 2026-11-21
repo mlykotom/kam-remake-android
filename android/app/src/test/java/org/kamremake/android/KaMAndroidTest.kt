@@ -214,6 +214,33 @@ class KaMAndroidTest {
     }
 
     @Test
+    fun httpsRedirectHelperAllowsHttpsAndBlocksProtocolDowngrade() {
+        assertEquals(
+            "https://example.com/files/pkg.exe",
+            DataInstaller.resolveHttpsRedirect("https://example.com/dl", "/files/pkg.exe")
+        )
+        assertEquals(
+            "https://cdn.example.com/pkg.exe",
+            DataInstaller.resolveHttpsRedirect("https://example.com/dl", "https://cdn.example.com/pkg.exe")
+        )
+        var rejectedDowngrade = false
+        try {
+            DataInstaller.resolveHttpsRedirect("https://example.com/dl", "http://evil.example.com/pkg.exe")
+        } catch (_: IOException) {
+            rejectedDowngrade = true
+        }
+        assertTrue(rejectedDowngrade)
+
+        var rejectedHttpStart = false
+        try {
+            DataInstaller.requireHttpsUrl("http://example.com/pkg.exe")
+        } catch (_: IOException) {
+            rejectedHttpStart = true
+        }
+        assertTrue(rejectedHttpStart)
+    }
+
+    @Test
     fun calculateVirtualSizeRespectsMenuAndInGameBounds() {
         // 1920x1080 in menu at scale 1.0 -> height is base 720, width scaled by 16:9 -> 1280x720
         val menuDefault = KaMView.calculateVirtualSize(w = 1920, h = 1080, uiScale = 1.0f, inGame = false)

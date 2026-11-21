@@ -242,11 +242,11 @@ internal object DataInstaller {
 
         try {
             status.onStatus("Connecting to official KaM Remake mirror…")
-            var currentUrl = downloadUrl
+            var currentUrl = requireHttpsUrl(downloadUrl)
             var conn: HttpURLConnection? = null
             for (hop in 0..5) {
                 val c = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
-                    instanceFollowRedirects = true
+                    instanceFollowRedirects = false
                     connectTimeout = 25_000
                     readTimeout = 45_000
                     setRequestProperty("User-Agent", "KaMRemake-Android/1.0")
@@ -254,7 +254,7 @@ internal object DataInstaller {
                 val code = c.responseCode
                 if (code in 300..399) {
                     val loc = c.getHeaderField("Location") ?: throw IOException("Redirect missing Location header")
-                    currentUrl = URL(URL(currentUrl), loc).toString()
+                    currentUrl = resolveHttpsRedirect(currentUrl, loc)
                     c.disconnect()
                     continue
                 }
@@ -590,6 +590,22 @@ internal object DataInstaller {
             }
         }
         return out
+    }
+
+    internal fun requireHttpsUrl(rawUrl: String): String {
+        val parsed = URL(rawUrl)
+        if (!parsed.protocol.equals("https", ignoreCase = true)) {
+            throw IOException("Refusing non-HTTPS download URL: ${parsed.protocol}")
+        }
+        return parsed.toString()
+    }
+
+    internal fun resolveHttpsRedirect(currentUrl: String, location: String): String {
+        val resolved = URL(URL(currentUrl), location)
+        if (!resolved.protocol.equals("https", ignoreCase = true)) {
+            throw IOException("Refusing non-HTTPS redirect to ${resolved.protocol}")
+        }
+        return resolved.toString()
     }
 
     internal fun normalizeZipPath(raw: String): String =

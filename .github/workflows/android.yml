@@ -12,12 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional existing tag to attach this APK release to (leave empty for artifact-only build)'
+        description: 'Optional existing tag to attach this APK release to (e.g. v1.0.0-r16435; leave empty for artifact-only build)'
         required: false
         default: ''
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,6 +27,12 @@ jobs:
   build-android:
     name: Build arm64-v8a APK & Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      apk_label: ${{ steps.meta.outputs.apk_label }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      signed_release: ${{ steps.keystore.outputs.signed_release }}
 
     steps:
       - name: Checkout repository (with PascalScript submodule)
@@ -82,6 +88,7 @@ jobs:
         run: android/toolchain/setup_toolchain.sh
 
       - name: Prepare release signing keystore (if configured)
+        id: keystore
         env:
           KAM_KEYSTORE_BASE64: ${{ secrets.KAM_KEYSTORE_BASE64 }}
           KAM_KEYSTORE_PASSWORD: ${{ secrets.KAM_KEYSTORE_PASSWORD }}
@@ -91,26 +98,35 @@ jobs:
           set -euo pipefail
           if [ -n "${KAM_KEYSTORE_BASE64}" ] && [ -n "${KAM_KEYSTORE_PASSWORD}" ] && [ -n "${KAM_KEY_ALIAS}" ] && [ -n "${KAM_KEY_PASSWORD}" ]; then
             echo "${KAM_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/kam-release.jks"
+            chmod 600 "${RUNNER_TEMP}/kam-release.jks"
             echo "KAM_KEYSTORE_FILE=${RUNNER_TEMP}/kam-release.jks" >> "$GITHUB_ENV"
-            echo "SIGNED_RELEASE=true" >> "$GITHUB_ENV"
+            echo "signed_release=true" >> "$GITHUB_OUTPUT"
             echo "Release keystore configured."
           else
-            echo "SIGNED_RELEASE=false" >> "$GITHUB_ENV"
-            echo "::warning::KAM_KEYSTORE_* secrets are not set; APK will use debug signing fallback. Add KAM_KEYSTORE_BASE64, KAM_KEYSTORE_PASSWORD, KAM_KEY_ALIAS, and KAM_KEY_PASSWORD in repository Secrets for production releases."
+            echo "signed_release=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::KAM_KEYSTORE_* secrets are not set; APK will use debug signing fallback and any tag release will be saved as a Draft."
           fi
 
       - name: Determine version metadata
+        id: meta
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           REV="$(grep -oE '[0-9]+' KM_Revision.inc | head -1 || echo 'unknown')"
+          RELEASE_TAG=""
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-            VER_NAME="${TAG#v}"
-            APK_LABEL="${TAG}"
-          elif [ -n "${{ inputs.release_tag }}" ]; then
-            TAG="${{ inputs.release_tag }}"
-            VER_NAME="${TAG#v}"
-            APK_LABEL="${TAG}"
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            VER_NAME="${RELEASE_TAG#v}"
+            APK_LABEL="${RELEASE_TAG}"
+          elif [ -n "${INPUT_RELEASE_TAG}" ]; then
+            if [[ ! "${INPUT_RELEASE_TAG}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+              echo "ERROR: Invalid release_tag format '${INPUT_RELEASE_TAG}' (must match ^v[0-9A-Za-z._-]+$)" >&2
+              exit 1
+            fi
+            RELEASE_TAG="${INPUT_RELEASE_TAG}"
+            VER_NAME="${RELEASE_TAG#v}"
+            APK_LABEL="${RELEASE_TAG}"
           else
             SHORT_SHA="${GITHUB_SHA::7}"
             VER_NAME="dev-r${REV}-${SHORT_SHA}"
@@ -119,6 +135,8 @@ jobs:
           echo "KAM_VERSION_NAME=${VER_NAME}" >> "$GITHUB_ENV"
           echo "KAM_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
           echo "APK_LABEL=${APK_LABEL}" >> "$GITHUB_ENV"
+          echo "apk_label=${APK_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Building versionName=${VER_NAME} versionCode=${GITHUB_RUN_NUMBER}"
 
       - name: Build engine-only Release APK (~25 MB)
@@ -167,27 +185,42 @@ jobs:
       - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KaM-Remake-Android-${{ env.APK_LABEL }}
+          name: KaM-Remake-Android-${{ steps.meta.outputs.apk_label }}
           path: dist/*
           retention-days: 30
 
-      - name: Publish GitHub Release (on v* tags or manual release_tag)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-android
+    if: github.event_name != 'pull_request' && needs.build-android.outputs.release_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download built APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: KaM-Remake-Android-${{ needs.build-android.outputs.apk_label }}
+          path: dist
+
+      - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
-          name: KaM Remake for Android ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+          tag_name: ${{ needs.build-android.outputs.release_tag }}
+          name: KaM Remake for Android ${{ needs.build-android.outputs.release_tag }}
+          draft: ${{ needs.build-android.outputs.signed_release != 'true' }}
           generate_release_notes: true
           body: |
             Engine-only **ARM64 (`arm64-v8a`)** Android build of **KaM Remake**.
             No copyrighted *Knights and Merchants* assets are included in this APK.
 
             ### How to Install
-            1. Install `KaM-Remake-Android-${{ env.APK_LABEL }}.apk` on your Android device (Android 8.0+ / `arm64-v8a`).
+            1. Install `KaM-Remake-Android-${{ needs.build-android.outputs.apk_label }}.apk` on your Android device (Android 8.0+ / `arm64-v8a`).
             2. Own ***Knights and Merchants*** on [GOG.com](https://www.gog.com/en/game/knights_and_merchants_the_peasants_rebellion) or [Steam](https://store.steampowered.com/app/253900/Knights_and_Merchants/).
             3. Open **KaM Remake** and follow the built-in **Game Data Setup** wizard (verify your GOG offline `.exe` or Steam/GOG folder, then tap **Download & Install Remake** — or import an existing PC `KaM Remake` `.zip`/folder).
 
-            ${{ env.SIGNED_RELEASE == 'true' && 'Signed with the official release key.' || '> **Note:** This build was signed with the fallback debug key because `KAM_KEYSTORE_*` repository secrets were not configured.' }}
+            ${{ needs.build-android.outputs.signed_release == 'true' && 'Signed with the official release key.' || '> **Draft Notice:** Saved as Draft because `KAM_KEYSTORE_*` repository secrets were not configured (signed with debug fallback key). Add release keystore secrets before publishing so users can upgrade seamlessly.' }}
           files: |
             dist/KaM-Remake-Android-*.apk
             dist/KaM-Remake-Android-*.apk.sha256
