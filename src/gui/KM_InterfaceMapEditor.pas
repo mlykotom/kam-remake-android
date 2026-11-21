@@ -152,6 +152,7 @@ type
     destructor Destroy; override;
     procedure ScrollSidebar(aDelta: Integer);
     function IsOverScrollableSidebar(X, Y: Integer): Boolean;
+    function IsFullScreenPageVisible: Boolean;
 
     procedure ShowMessage(const aText: string);
     procedure ExportPages(const aPath: string); override;
@@ -1798,6 +1799,13 @@ begin
             and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
                      and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
+
+
+function TKMMapEdInterface.IsFullScreenPageVisible: Boolean;
+begin
+  Result := (fGuiMenu <> nil) and (fGuiMenu.GuiMenuSettings <> nil) and fGuiMenu.GuiMenuSettings.Visible;
+end;
+
 
 
 

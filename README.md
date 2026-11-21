@@ -32,9 +32,8 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 - **One-Tap Game Speed Bar:** Always-accessible **Pause (`⏸`)** and speed buttons (**`x1`**, **`x3`**, **`x6`**, **`x10`** / mission-specific multipliers) sit right next to the game clock in the top-left corner — no `P` or `F5`–`F8` keyboard keys needed. Tapping anywhere on the pause overlay resumes play.
 
 ### 4. Widescreen Adaptation, Independent Scrollable Sidebar & Live UI Scaling
-- **Independent Sidebar Scaling & Vertical Scroll:** Scale the left sidebar independently (`125%` by default, up to `200%` in *Game Settings*) and **scroll it vertically by touch** whenever build grids, troop panels, or wares exceed phone height — in both Gameplay and the Map Editor.
-- **Three-Finger Tap Port Settings:** Tap anywhere with **three fingers** to adjust global in-game interface scaling (`0.5×` – `2.0×`) on the fly while keeping main menus crisp.
-- **Camera Cutout Safe Insets & Full Rotation:** Automatically shifts gameplay and editor UI clear of punch-hole cameras and notches, supports landscape/portrait rotation, and works seamlessly with **USB / Bluetooth mice and keyboards**.
+- **In-Game Interface & Sidebar Scaling:** Adjust both global **Interface scale (`50%` – `200%`)** and independent **Sidebar scale (`100%` – `200%`, `125%` default)** directly in *Options → Controls* (no 3-finger OS screenshot conflicts!), and **scroll the left sidebar vertically by touch** whenever build grids, troop panels, or wares exceed phone height — in both Gameplay and the Map Editor.
+- **Camera Cutout Safe Insets, Gesture Exclusion & Full Rotation:** Automatically shifts gameplay and editor UI clear of punch-hole cameras and notches, opts the active left sidebar out of Android's edge-back swipe gesture, supports landscape/portrait rotation, and works seamlessly with **USB / Bluetooth mice and keyboards**.
 
 ![Independent Sidebar Scaling & Settings](android/docs/images/interface_scaling.png)
 
@@ -61,9 +60,9 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 | **Long-press (250 ms)** | Right-click on map or right-clickable UI (Market/Storehouse `±10`, flags; **hold & drag** for troop facing) |
 | **Two-finger tap** | Right-click |
 | **Pinch / two-finger drag** | Zoom in & out / pan camera |
-| **Vertical drag on left sidebar** | Scroll sidebar up & down when taller than the screen |
-| **Three-finger tap** | Open Android Interface Scale dialog (`0.5×` – `2.0×`) |
-| **Android Back button / gesture** | `Esc` (skip intro video, cancel building placement, close active panel) |
+| **Vertical drag on left sidebar** | Scroll sidebar up & down when taller than the screen (protected from Android left-edge Back swipes) |
+| **Options → Controls** | Adjust **Interface scale (`50%` – `200%`)** and **Sidebar scale (`100%` – `200%`)** |
+| **Android Back button / right-edge gesture** | `Esc` (skip intro video, cancel building placement, close active panel) |
 | **USB / Bluetooth Mouse & Keyboard** | Full desktop controls (hover, left/right/middle click, scroll wheel, hotkeys) |
 
 ---

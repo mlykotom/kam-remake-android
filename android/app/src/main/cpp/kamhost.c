@@ -24,6 +24,7 @@ typedef struct {
   void (*PlayVideo)(const char *path, int volume, int stretch);
   void (*StopVideo)(void);
   void (*Haptic)(void);
+  void (*SetUIScale)(float scale);
 } kam_host_callbacks;
 
 // Exported by libkamcore.so
@@ -32,6 +33,7 @@ extern int kam_init(const char *dataDir, int width, int height);
 extern void kam_frame(void);
 extern void kam_resize(int width, int height);
 extern void kam_set_safe_insets(int left, int right);
+extern void kam_set_ui_scale(float scale);
 extern void kam_pause(void);
 extern void kam_resume(void);
 extern void kam_shutdown(void);
@@ -44,13 +46,14 @@ extern void kam_back(void);
 extern int kam_text_input_active(void);
 extern void kam_video_finished(void);
 extern int kam_in_game(void);
+extern int kam_toolbar_width(void);
 extern int kam_text_input_bottom(void);
 extern int kam_text_field_tapped(void);
 extern void kam_selftest(const char *mode);
 
 static JavaVM *g_vm;
 static jclass g_cls;
-static jmethodID m_showMessage, m_clipSet, m_clipGet, m_openUrl, m_quit, m_playVideo, m_stopVideo, m_haptic;
+static jmethodID m_showMessage, m_clipSet, m_clipGet, m_openUrl, m_quit, m_playVideo, m_stopVideo, m_haptic, m_setUiScale;
 static char *g_clipboard;
 
 static JNIEnv *get_env(void) {
@@ -118,6 +121,11 @@ static void cb_stop_video(void) {
 static void cb_haptic(void) {
   JNIEnv *env = get_env();
   (*env)->CallStaticVoidMethod(env, g_cls, m_haptic);
+}
+
+static void cb_set_ui_scale(float scale) {
+  JNIEnv *env = get_env();
+  (*env)->CallStaticVoidMethod(env, g_cls, m_setUiScale, scale);
 }
 
 // ---------- Crash reporting: logs the faulting address and stack as library+offset ----------
@@ -304,8 +312,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved) {
   m_playVideo = (*env)->GetStaticMethodID(env, g_cls, "onPlayVideo", "(Ljava/lang/String;IZ)V");
   m_stopVideo = (*env)->GetStaticMethodID(env, g_cls, "onStopVideo", "()V");
   m_haptic = (*env)->GetStaticMethodID(env, g_cls, "onHaptic", "()V");
+  m_setUiScale = (*env)->GetStaticMethodID(env, g_cls, "onSetUiScale", "(F)V");
 
-  static kam_host_callbacks cb = {cb_show_message, cb_clipboard_set, cb_clipboard_get, cb_open_url, cb_quit, cb_play_video, cb_stop_video, cb_haptic};
+  static kam_host_callbacks cb = {cb_show_message, cb_clipboard_set, cb_clipboard_get, cb_open_url, cb_quit, cb_play_video, cb_stop_video, cb_haptic, cb_set_ui_scale};
   kam_set_callbacks(&cb);
   return JNI_VERSION_1_6;
 }
@@ -329,6 +338,7 @@ JNI(void, frame)(JNIEnv *env, jclass cls) {
 }
 JNI(void, resize)(JNIEnv *env, jclass cls, jint w, jint h) { (void)env; (void)cls; kam_resize(w, h); }
 JNI(void, setSafeInsets)(JNIEnv *env, jclass cls, jint left, jint right) { (void)env; (void)cls; kam_set_safe_insets(left, right); }
+JNI(void, setUiScale)(JNIEnv *env, jclass cls, jfloat scale) { (void)env; (void)cls; kam_set_ui_scale(scale); }
 JNI(void, pause)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_pause(); }
 JNI(void, resume)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_resume(); }
 JNI(void, shutdown)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_shutdown(); }
@@ -344,6 +354,7 @@ JNI(void, back)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_back(); }
 JNI(jboolean, textInputActive)(JNIEnv *env, jclass cls) { (void)env; (void)cls; return kam_text_input_active() ? JNI_TRUE : JNI_FALSE; }
 JNI(void, videoFinished)(JNIEnv *env, jclass cls) { (void)env; (void)cls; kam_video_finished(); }
 JNI(jboolean, inGame)(JNIEnv *env, jclass cls) { (void)env; (void)cls; return kam_in_game() ? JNI_TRUE : JNI_FALSE; }
+JNI(jint, toolbarWidth)(JNIEnv *env, jclass cls) { (void)env; (void)cls; return kam_toolbar_width(); }
 JNI(jint, textInputBottom)(JNIEnv *env, jclass cls) { (void)env; (void)cls; return kam_text_input_bottom(); }
 JNI(jboolean, textFieldTapped)(JNIEnv *env, jclass cls) { (void)env; (void)cls; return kam_text_field_tapped() ? JNI_TRUE : JNI_FALSE; }
 JNI(void, selfTest)(JNIEnv *env, jclass cls, jstring mode) {

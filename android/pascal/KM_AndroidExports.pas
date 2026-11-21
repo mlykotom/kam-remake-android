@@ -22,6 +22,7 @@ type
     PlayVideo: procedure(aPath: PAnsiChar; aVolume, aStretch: Integer); cdecl;
     StopVideo: procedure; cdecl;
     Haptic: procedure; cdecl;
+    SetUIScale: procedure(aScale: Single); cdecl;
   end;
   PKMHostCallbacks = ^TKMHostCallbacks;
 
@@ -41,6 +42,7 @@ function kam_init(aDataDir: PAnsiChar; aWidth, aHeight: Integer): Integer; cdecl
 procedure kam_frame; cdecl;
 procedure kam_resize(aWidth, aHeight: Integer); cdecl;
 procedure kam_set_safe_insets(aLeft, aRight: Integer); cdecl;
+procedure kam_set_ui_scale(aScale: Single); cdecl;
 procedure kam_pause; cdecl;
 procedure kam_resume; cdecl;
 procedure kam_shutdown; cdecl;
@@ -53,6 +55,7 @@ procedure kam_back; cdecl;
 function kam_text_input_active: Integer; cdecl;
 procedure kam_video_finished; cdecl;
 function kam_in_game: Integer; cdecl;
+function kam_toolbar_width: Integer; cdecl;
 function kam_text_input_bottom: Integer; cdecl;
 function kam_text_field_tapped: Integer; cdecl;
 procedure kam_selftest(aMode: PAnsiChar); cdecl;
@@ -155,6 +158,12 @@ begin
     gCallbacks.Haptic();
 end;
 
+procedure HostSetUIScale(aScale: Single);
+begin
+  if Assigned(gCallbacks.SetUIScale) then
+    gCallbacks.SetUIScale(aScale);
+end;
+
 procedure HostQuit;
 begin
   if Assigned(gCallbacks.Quit) then
@@ -173,6 +182,7 @@ begin
   gHostPlayVideo := HostPlayVideo;
   gHostStopVideo := HostStopVideo;
   gHostHaptic := HostHaptic;
+  gHostSetUIScale := HostSetUIScale;
 end;
 
 
@@ -469,6 +479,12 @@ begin
   ALog(Format('kam_set_safe_insets: left=%d right=%d', [aLeft, aRight]));
   if (gMain <> nil) and gMain.Started then
     gMain.SurfaceResized(gHostScreenWidth, gHostScreenHeight);
+end;
+
+
+procedure kam_set_ui_scale(aScale: Single); cdecl;
+begin
+  gHostUIScale := EnsureRange(aScale, 0.5, 2.0);
 end;
 
 
@@ -1200,12 +1216,25 @@ begin
   // Only while the game map with its sidebar is on screen (not the loading page or other menu pages)
   if (gGameApp <> nil) and (gGameApp.Game <> nil) and (gGameApp.ActiveInterface is TKMUserInterfaceGame) then
     Result := 1;
-  // Mission results and statistics need the menu screen size
+  // Mission results, statistics, and full settings forms need the menu screen size
   if (Result = 1) and (gGame.GamePlayInterface <> nil)
   and (gGameApp.ActiveInterface = gGame.GamePlayInterface)
   and gGame.GamePlayInterface.IsFullScreenPageVisible then
     Result := 0;
+  if (Result = 1) and (gGame.MapEditorInterface <> nil)
+  and (gGameApp.ActiveInterface = gGame.MapEditorInterface)
+  and gGame.MapEditorInterface.IsFullScreenPageVisible then
+    Result := 0;
 end;
+
+
+function kam_toolbar_width: Integer; cdecl;
+begin
+  Result := 0;
+  if (kam_in_game = 1) and (GameViewport <> nil) then
+    Result := Max(0, GameViewport.ToolbarWidth);
+end;
+
 
 
 // Bottom edge (render coordinates) of the focused text field, -1 if none. Used to keep it above the soft keyboard

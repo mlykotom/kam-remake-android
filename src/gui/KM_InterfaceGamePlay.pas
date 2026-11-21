@@ -1199,12 +1199,12 @@ begin
 end;
 
 
-// Results/statistics pages are designed for the full menu size (1024x768)
+// Results/statistics and settings pages are designed for the full menu size (1024x720+)
 function TKMGamePlayInterface.IsFullScreenPageVisible: Boolean;
 begin
-  Result := fGuiGameResultsSP.Visible or fGuiGameResultsMP.Visible;
-
+  Result := fGuiGameResultsSP.Visible or fGuiGameResultsMP.Visible or fGuiMenuOptions.Visible;
 end;
+
 
 
 function TKMGamePlayInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;

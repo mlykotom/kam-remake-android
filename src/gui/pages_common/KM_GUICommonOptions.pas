@@ -77,6 +77,7 @@ type
         CheckBox_FullFonts: TKMCheckBox;
       Panel_Ctrl: TKMPanel;
         TrackBar_ScrollSpeed: TKMTrackBar;
+        TrackBar_UIScale: TKMTrackBar;
         TrackBar_SidebarScale: TKMTrackBar;
         Button_OptionsKeys: TKMButton;
       Panel_Game: TKMPanel;
@@ -184,9 +185,15 @@ begin
                     topBlock := 0;
                     leftBlock := 0;
 
-                    CreateRes(topBlock, leftBlock);
+                    if HAS_DESKTOP_RESOLUTION_OPTIONS then
+                      CreateRes(topBlock, leftBlock);
                     CreateGraphics(topBlock, leftBlock);
                     CreateVideos(topBlock, leftBlock);
+                    if not HAS_DESKTOP_RESOLUTION_OPTIONS then
+                    begin
+                      CreateReplay(topBlock, leftBlock);
+                      CreateMods(topBlock, leftBlock);
+                    end;
 
                     //--- Column 2 --------------------------------------------------------------
                     topBlock := 0;
@@ -195,8 +202,11 @@ begin
                     CreateSound(topBlock, leftBlock);
                     CreateControls(topBlock, leftBlock);
                     CreateGameplay(topBlock, leftBlock);
-                    CreateReplay(topBlock, leftBlock);
-                    CreateMods(topBlock, leftBlock);
+                    if HAS_DESKTOP_RESOLUTION_OPTIONS then
+                    begin
+                      CreateReplay(topBlock, leftBlock);
+                      CreateMods(topBlock, leftBlock);
+                    end;
 
                     //--- Column 3 --------------------------------------------------------------
                     topBlock := 0;
@@ -387,25 +397,44 @@ end;
 
 
 procedure TKMGUICommonOptions.CreateControls(var aTopBlock: Integer; var aLeftBlock: Integer);
+var
+  top, pnlHeight: Integer;
 begin
+  if HAS_PLATFORM_UI_SCALE then
+    pnlHeight := 210
+  else
+    pnlHeight := 165;
+
   // Controls section
-  Panel_Ctrl := TKMPanel.Create(Panel_Options, aLeftBlock, aTopBlock, 280, 165);
+  Panel_Ctrl := TKMPanel.Create(Panel_Options, aLeftBlock, aTopBlock, 280, pnlHeight);
   NextBlock(aTopBlock, Panel_Ctrl, 0);
   Panel_Ctrl.Anchors := [anLeft];
     TKMLabel.Create(Panel_Ctrl,6,0,270,20,gResTexts[TX_MENU_OPTIONS_CONTROLS],fntOutline,taLeft);
     TKMBevel.Create(Panel_Ctrl,0,20,280,Panel_Ctrl.Height - 20);
 
-    TrackBar_ScrollSpeed := TKMTrackBar.Create(Panel_Ctrl,10,27,256,OPT_SLIDER_MIN,OPT_SLIDER_MAX);
+    top := 27;
+    TrackBar_ScrollSpeed := TKMTrackBar.Create(Panel_Ctrl,10,top,256,OPT_SLIDER_MIN,OPT_SLIDER_MAX);
     TrackBar_ScrollSpeed.Caption := gResTexts[TX_MENU_OPTIONS_SCROLL_SPEED];
     TrackBar_ScrollSpeed.OnChange := Change;
+    Inc(top, 45);
 
-    TrackBar_SidebarScale := TKMTrackBar.Create(Panel_Ctrl, 10, 72, 256, 100, 200);
+    if HAS_PLATFORM_UI_SCALE then
+    begin
+      TrackBar_UIScale := TKMTrackBar.Create(Panel_Ctrl, 10, top, 256, 50, 200);
+      TrackBar_UIScale.Step := 5;
+      TrackBar_UIScale.Caption := 'Interface scale (%)';
+      TrackBar_UIScale.OnChange := Change;
+      Inc(top, 45);
+    end;
+
+    TrackBar_SidebarScale := TKMTrackBar.Create(Panel_Ctrl, 10, top, 256, 100, 200);
     TrackBar_SidebarScale.Step := 5;
     TrackBar_SidebarScale.Caption := 'Sidebar scale (%)';
     TrackBar_SidebarScale.OnChange := Change;
+    Inc(top, 50);
 
     // Keybindings button
-    Button_OptionsKeys := TKMButton.Create(Panel_Ctrl, 10, 122, 260, 30, gResTexts[TX_MENU_OPTIONS_KEYBIND], bsMenu);
+    Button_OptionsKeys := TKMButton.Create(Panel_Ctrl, 10, top, 260, 30, gResTexts[TX_MENU_OPTIONS_KEYBIND], bsMenu);
     Button_OptionsKeys.Anchors := [anLeft];
     Button_OptionsKeys.OnClick := KeysClick;
 end;
@@ -590,6 +619,8 @@ begin
   CheckBox_LerpAnims.Enabled    := CheckBox_LerpRender.Checked;
   CheckBox_LerpAnims.Checked    := gGameSettings.GFX.InterpolatedAnimations;
   TrackBar_ScrollSpeed.Position := Round(gGameSettings.ScrollSpeed / SCROLL_SPEED_MULTIPLIER);
+  if HAS_PLATFORM_UI_SCALE then
+    TrackBar_UIScale.Position := Round(PlatformGetUIScale * 100);
   TrackBar_SidebarScale.Position := Round(gGameSettings.SidebarScale * 100);
   TrackBar_SFX.Position         := Round(gGameSettings.SFX.SoundFXVolume * TrackBar_SFX.MaxValue);
   TrackBar_Music.Position       := Round(gGameSettings.SFX.MusicVolume * TrackBar_Music.MaxValue);
@@ -620,7 +651,8 @@ begin
     Radio_Lang.ItemIndex := gResLocales.IndexByCode(gGameSettings.Locale);
 
     // We need to reset dropboxes every time we enter Options page
-    RefreshResolutions;
+    if HAS_DESKTOP_RESOLUTION_OPTIONS then
+      RefreshResolutions;
   end
   else
   // Only in Game
@@ -670,7 +702,10 @@ begin
   CheckBox_LerpAnims.Enabled       := CheckBox_LerpRender.Checked;
 
   gGameSettings.ScrollSpeed        := TrackBar_ScrollSpeed.Position * SCROLL_SPEED_MULTIPLIER;
+  if HAS_PLATFORM_UI_SCALE then
+    PlatformSetUIScale(TrackBar_UIScale.Position / 100);
   gGameSettings.SidebarScale       := TrackBar_SidebarScale.Position / 100;
+
 
   gGameSettings.SFX.SoundFXVolume      := TrackBar_SFX.Position / TrackBar_SFX.MaxValue;
   gGameSettings.SFX.MusicVolume        := TrackBar_Music.Position / TrackBar_Music.MaxValue;

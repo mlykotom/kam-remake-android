@@ -21,6 +21,7 @@ internal object KaMNative {
     @JvmStatic external fun frame()
     @JvmStatic external fun resize(width: Int, height: Int)
     @JvmStatic external fun setSafeInsets(left: Int, right: Int)
+    @JvmStatic external fun setUiScale(scale: Float)
     @JvmStatic external fun pause()
     @JvmStatic external fun resume()
     @JvmStatic external fun shutdown()
@@ -33,6 +34,7 @@ internal object KaMNative {
     @JvmStatic external fun textInputActive(): Boolean
     @JvmStatic external fun videoFinished()
     @JvmStatic external fun inGame(): Boolean
+    @JvmStatic external fun toolbarWidth(): Int
     @JvmStatic external fun textInputBottom(): Int
     @JvmStatic external fun textFieldTapped(): Boolean
     @JvmStatic external fun selfTest(mode: String)
@@ -74,5 +76,10 @@ internal object KaMNative {
     @JvmStatic
     fun onHaptic() {
         activity?.performHaptic()
+    }
+
+    @JvmStatic
+    fun onSetUiScale(scale: Float) {
+        activity?.onEngineSetUiScale(scale)
     }
 }
