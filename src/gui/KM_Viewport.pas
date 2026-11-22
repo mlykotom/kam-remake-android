@@ -30,6 +30,8 @@ type
     fPanImmediately : Boolean;
     fPanDuration, fPanProgress: Cardinal;
     fToolbarWidth: Integer;
+    fToolbarHeight: Integer;
+    fScreenWidth, fScreenHeight: Integer;
 
     fOnPositionSet: TPointFEvent;
 
@@ -37,6 +39,7 @@ type
     procedure SetPosition(const Value: TKMPointF);
     procedure SetZoom(aZoom: Single);
     function GetToolbarWidth: Integer;
+    function GetToolbarHeight: Integer;
     function GetTopPad: Single;
     function GetZoomedCellSizePx: Single; inline;
 
@@ -46,6 +49,9 @@ type
     constructor Create(aToolBarWidth: Integer; aWidth, aHeight: Integer; aOnPositionSet: TPointFEvent);
 
     property ToolbarWidth: Integer read GetToolbarWidth write fToolbarWidth;
+    property ToolbarHeight: Integer read GetToolbarHeight write fToolbarHeight;
+    property ScreenWidth: Integer read fScreenWidth;
+    property ScreenHeight: Integer read fScreenHeight;
 
 
     property Position: TKMPointF read GetPosition write SetPosition;
@@ -157,10 +163,13 @@ end;
 
 procedure TKMViewport.Resize(NewWidth, NewHeight: Integer);
 begin
+  fScreenWidth := NewWidth;
+  fScreenHeight := NewHeight;
+
   fViewRect.Left   := ToolbarWidth;
   fViewRect.Top    := 0;
   fViewRect.Right  := NewWidth;
-  fViewRect.Bottom := NewHeight;
+  fViewRect.Bottom := Max(1, NewHeight - ToolbarHeight);
 
   fViewportClip.X := fViewRect.Right - fViewRect.Left;
   fViewportClip.Y := fViewRect.Bottom - fViewRect.Top;
@@ -191,6 +200,15 @@ begin
   if SAVE_MAP_TO_FBO_RENDER then Exit(0);
 
   Result := fToolbarWidth;
+end;
+
+
+function TKMViewport.GetToolbarHeight: Integer;
+begin
+  // Don't render toolbar when SAVE_MAP_TO_FBO is set
+  if SAVE_MAP_TO_FBO_RENDER then Exit(0);
+
+  Result := fToolbarHeight;
 end;
 
 

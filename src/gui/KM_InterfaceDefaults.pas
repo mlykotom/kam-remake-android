@@ -36,6 +36,8 @@ type
     fHintVisible: Boolean;
     fHintCtrl: TKMControl;
     fHintStage: TKMHintStage;
+    fTouchHintCtrl: TKMControl;
+    fTouchHintActive: Boolean;
 
     fHintDebug: TKMShape;
     fHintDebugLbl: TKMLabel;
@@ -72,6 +74,7 @@ type
     procedure ResetHint;
 
     function GetToolbarWidth: Integer; virtual;
+    function GetToolbarHeight: Integer; virtual;
     function GetSafeInsetLeft: Integer; virtual;
     function GetSafeInsetRight: Integer; virtual;
   public
@@ -85,6 +88,7 @@ type
     function GetMainPanelSize: TKMPoint;
 
     property ToolbarWidth: Integer read GetToolbarWidth;
+    property ToolbarHeight: Integer read GetToolbarHeight;
 
     procedure KeyDown(Key: Word; Shift: TShiftState; aIsFirst: Boolean; var aHandled: Boolean); virtual;
     procedure KeyPress(Key: Char); virtual;
@@ -96,6 +100,9 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); virtual; abstract;
     procedure MouseWheel(Shift: TShiftState; WheelSteps: Integer; X,Y: Integer; var aHandled: Boolean); virtual;
     procedure Resize(X,Y: Word); virtual;
+    procedure SetTouchHint(aCtrl: TKMControl);
+    procedure ClearTouchHint;
+
     procedure UpdateHotkeys; virtual; abstract;
     procedure UpdateState(aGlobalTickCount: Cardinal); virtual;
     procedure Paint; virtual;
@@ -148,6 +155,7 @@ uses
   KM_Sound,
   KM_GameSettings,
   KM_Main,
+  KM_Platform,
   KM_CommonTypes;
 
 
@@ -386,6 +394,35 @@ end;
 procedure TKMUserInterfaceCommon.ResetHint;
 begin
   fHintCtrl := nil;
+  fTouchHintCtrl := nil;
+  fTouchHintActive := False;
+end;
+
+
+procedure TKMUserInterfaceCommon.SetTouchHint(aCtrl: TKMControl);
+begin
+  if (aCtrl <> nil) and aCtrl.Visible and (aCtrl.Hint <> '') then
+  begin
+    fTouchHintCtrl := aCtrl;
+    fTouchHintActive := True;
+    fHintCtrl := aCtrl;
+    fHintVisible := True;
+  end
+  else
+    ClearTouchHint;
+end;
+
+
+procedure TKMUserInterfaceCommon.ClearTouchHint;
+begin
+  if fTouchHintActive then
+  begin
+    fTouchHintCtrl := nil;
+    fTouchHintActive := False;
+    fHintCtrl := nil;
+    fHintVisible := False;
+    fHintStage := hsFadeIn;
+  end;
 end;
 
 
@@ -419,7 +456,27 @@ const
   FADE_IN_TIME = 10;
   FADE_RESET_TIME = 5;
 begin
+  if fTouchHintActive then
+  begin
+    if (fTouchHintCtrl <> nil) and fTouchHintCtrl.Visible and (fTouchHintCtrl.Hint <> '') then
+    begin
+      fHintCtrl := fTouchHintCtrl;
+      fHintVisible := True;
+      Exit;
+    end;
+    ClearTouchHint;
+  end;
+
+  if PlatformIsTouchMode then
+  begin
+    fHintCtrl := nil;
+    fHintVisible := False;
+    fHintStage := hsFadeIn;
+    Exit;
+  end;
+
   fHintOver := fMyControls.CtrlOver;
+
 
   case fHintStage of
     hsFadeIn: // Hint was hidden a long time ago
@@ -526,6 +583,12 @@ begin
 end;
 
 
+function TKMUserInterfaceCommon.GetToolbarHeight: Integer;
+begin
+  Result := 0;
+end;
+
+
 function TKMUserInterfaceCommon.GetSafeInsetLeft: Integer;
 begin
   Result := 0;
@@ -550,7 +613,8 @@ var
   hintBase, hintTxtOffset, hintOrig: TKMPoint;
   hintBackRect: TKMRect;
   left, top, cLeft, cTop, cRight, cBottom: Integer;
-  hintScale: Single;
+  maxWrapW, scaledW, scaledH: Integer;
+  hintScale, touchScale: Single;
 begin
   if DBG_UI_HINT_POS then
   begin
@@ -600,7 +664,10 @@ begin
 //  // When previous Hint obj is covered by Label_Hint or Bevel_HintBG ignore it
 //  if (Sender = Label_Hint) or (Sender = Bevel_HintBG) then Exit;
 
-  Label_Hint.Font := GetHintActualFont;
+  if fTouchHintActive then
+    Label_Hint.Font := fntOutline
+  else
+    Label_Hint.Font := GetHintActualFont;
   Label_Hint.Caption := fHintCtrl.Hint;
   Label_Hint.FontColor := icWhite;
 
@@ -608,7 +675,44 @@ begin
 
   hintScale := fHintCtrl.EffectiveRenderScale;
   hintOrig := fHintCtrl.ScaledOrigin;
+  touchScale := Max(1.0, hintScale);
 
+  if fTouchHintActive then
+  begin
+    maxWrapW := Max(160, Min(320, Trunc((Panel_Main.Width - 16) / touchScale)));
+    if Label_Hint.TextSize.X > maxWrapW then
+    begin
+      Label_Hint.Width := maxWrapW;
+      Label_Hint.WordWrap := True;
+    end;
+
+    cLeft := fHintCtrl.AbsLeft;
+    cTop := fHintCtrl.AbsTop;
+    cRight := fHintCtrl.AbsRight;
+    cBottom := fHintCtrl.AbsBottom;
+    fHintCtrl.LocalToScreen(cLeft, cTop);
+    fHintCtrl.LocalToScreen(cRight, cBottom);
+
+    Bevel_HintBG.Width := Label_Hint.TextSize.X + PAD;
+    Bevel_HintBG.Height := Label_Hint.TextSize.Y + PAD;
+    scaledW := Round(Bevel_HintBG.Width * touchScale);
+    scaledH := Round(Bevel_HintBG.Height * touchScale);
+
+    Bevel_HintBG.AbsLeft := EnsureRange((cLeft + cRight) div 2 - scaledW div 2,
+                                        Panel_Main.AbsLeft + 4,
+                                        Max(Panel_Main.AbsLeft + 4, Panel_Main.AbsRight - scaledW - 4));
+    Bevel_HintBG.AbsTop := cTop - scaledH - Round(16 * touchScale);
+    if Bevel_HintBG.AbsTop < 4 then
+      Bevel_HintBG.AbsTop := cBottom + Round(20 * touchScale);
+
+    Label_Hint.AbsLeft := Bevel_HintBG.AbsLeft + PAD div 2;
+    Label_Hint.AbsTop := Bevel_HintBG.AbsTop + PAD div 2 + (FONT_Y_FIX - 1);
+
+    Bevel_HintBG.BackAlpha := 0.88;
+    Bevel_HintBG.EdgeAlpha := 0.92;
+    Bevel_HintBG.Color := fHintCtrl.HintBackColor.ToColor3f;
+  end
+  else
   case GetHintActualKind of
     hkControl:      begin
                       cLeft := fHintCtrl.AbsLeft;
@@ -673,19 +777,29 @@ begin
   Bevel_HintBG.Show;
   Label_Hint.Show;
 
-  if (GetHintActualKind = hkTextNotFit) and (hintScale <> 1) then
+  if fTouchHintActive and (touchScale <> 1) then
+    TKMRenderUI.PushScale(Bevel_HintBG.AbsLeft, Bevel_HintBG.AbsTop, touchScale)
+  else
+  if not fTouchHintActive and (GetHintActualKind = hkTextNotFit) and (hintScale <> 1) then
     TKMRenderUI.PushScale(hintOrig.X, hintOrig.Y, hintScale);
-
 
   Bevel_HintBG.Paint;
   Label_Hint.Paint;
 
-  if (GetHintActualKind = hkTextNotFit) and (hintScale <> 1) then
+  if (fTouchHintActive and (touchScale <> 1))
+  or (not fTouchHintActive and (GetHintActualKind = hkTextNotFit) and (hintScale <> 1)) then
     TKMRenderUI.PopScale;
+
+  if Label_Hint.WordWrap then
+  begin
+    Label_Hint.WordWrap := False;
+    Label_Hint.Width := 0;
+  end;
 
   Bevel_HintBG.Hide;
 
   Label_Hint.Hide;
+
 end;
 
 

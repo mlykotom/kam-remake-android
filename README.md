@@ -56,6 +56,7 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 | Touch Gesture / Input | In-Game Action |
 | :--- | :--- |
 | **Single tap** | Left-click (select unit/building, press UI button, place active road/field) |
+| **Hold UI control (300 ms)** | "Press & Peek" floating tooltip (building wood/stone costs, tech-tree prerequisites, and ware/order hints; slide finger to scrub) |
 | **Tap active build tool again** | Toggle build/road/field/demolish tool off |
 | **Drag building preview** | Move building footprint tile-by-tile before confirming (`✓` / `✗`) |
 | **One-finger drag on map** | Pan camera (or paint continuously when Road / Field / Editor brush is active) |

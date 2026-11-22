@@ -218,16 +218,21 @@ type
     procedure ApplyTouchSelectionMagnet(const aCell: TKMPoint);
   protected
     Panel_Sidebar: TKMPanel;
+    Dock_Chrome: TKMControl;
+    Button_DockToggle: TKMButton;
+    Button_DockExpand: TKMButton;
     Sidebar_Top: TKMImage;
     Sidebar_Middle: TKMImage;
     Sidebar_Bottom: array of TKMImage;
     MinimapView: TKMMinimapView;
+    Panel_TabBar: TKMPanel;
 
     Image_Chat: TKMImage;
     Image_MPAllies: TKMImage; // Multiplayer buttons
     Image_MessageLog: TKMImage;
     Label_ChatUnread: TKMLabel;
     Image_Message: array[0..MAX_VISIBLE_MSGS] of TKMImage; // Queue of messages covers 32*48=1536px height
+    Panel_Clock: TKMPanel;
     Image_Clock: TKMImage; // Clock displayed when game speed is increased
     Label_Time: TKMLabel;
     Label_ClockSpeedActual: TKMLabel;
@@ -251,10 +256,18 @@ type
     fSidebarScrollShowUntil: Cardinal;
 
     fControlsBaseTop: Integer;
+    // Portrait bottom split dock state (Android portrait mode)
+    fIsBottomDock: Boolean;
+    fBottomDockCollapsed: Boolean;
+    fBottomDockOffsetX: Integer;
+    fBottomDockHeightPx: Integer;
+    fLastSelectedForDock: TObject;
   private
     procedure ApplySidebarScroll;
     procedure PaintSidebarScrollIndicator;
-
+    procedure SetBottomDockCollapsed(aCollapsed: Boolean);
+    procedure DockToggle_Click(Sender: TObject);
+    procedure UpdateClockAndSpeedPos;
   protected
 
       Button_Main: array [tbBuild..tbMenu] of TKMButton; // 4 common buttons + Return
@@ -373,6 +386,7 @@ type
       function IsDragScrollingAllowed: Boolean; override;
 
       function GetToolbarWidth: Integer; override;
+      function GetToolbarHeight: Integer; override;
       function GetDebugInfo: string; override;
       function ZoomChangeBlocked: Boolean; override;
       procedure OptionsChanged; override;
@@ -474,6 +488,17 @@ const
   PANEL_TRACK_TOP = 285;
   REPLAYBAR_DEFAULT_WIDTH = 400;
 
+  // Portrait bottom split dock geometry (logical px inside Panel_Sidebar)
+  DOCK_COL_W = 198;         // Inner wood width of Sidebar_Top / Panel_Controls (TOOLBAR_WIDTH - 26)
+  DOCK_DIVIDER_W = 14;      // Center carved stone pillar width
+  DOCK_LOGICAL_W = DOCK_COL_W * 2 + DOCK_DIVIDER_W; // 410 logical px
+  DOCK_STONE_H = 20;        // Horizontal carved stone top divider
+  DOCK_BODY_H = 360;        // Fits all 11 sub-pages (max 347px Storehouse / 360px Menu) with zero scrolling
+  DOCK_TOTAL_H = DOCK_STONE_H + DOCK_BODY_H; // 380 logical px
+  DOCK_COLLAPSED_BODY_H = 44;
+  DOCK_COLLAPSED_H = DOCK_STONE_H + DOCK_COLLAPSED_BODY_H; // 64 logical px
+  DOCK_MAX_HEIGHT_RATIO = 0.45; // Cap expanded dock height at 45% of portrait screen height
+
   KEY_FUNCS_ALLOWED_ON_PAUSE: TKMKeyFunctionSet = [
     kfMusicPrevTrack, kfMusicNextTrack, kfMusicDisable, kfMusicShuffle, kfMusicVolumeUp, kfMusicVolumeDown,  kfMusicMute,
     kfSoundVolumeUp, kfSoundVolumeDown, kfSoundMute, kfMuteAll,
@@ -482,6 +507,67 @@ const
 
   KEY_FUNCS_ALLOWED_ON_PAUSE_IN_SP: TKMKeyFunctionSet =
     [kfScrollLeft, kfScrollRight, kfScrollUp, kfScrollDown, kfZoomIn, kfZoomOut, kfZoomReset];
+
+type
+  TKMPortraitDockChrome = class(TKMControl)
+  public
+    ContentOffsetX: Integer;
+    Collapsed: Boolean;
+    constructor Create(aParent: TKMPanel);
+    procedure Paint; override;
+  end;
+
+
+{ TKMPortraitDockChrome }
+constructor TKMPortraitDockChrome.Create(aParent: TKMPanel);
+begin
+  inherited Create(aParent, 0, 0, DOCK_LOGICAL_W, DOCK_TOTAL_H);
+  Hitable := False;
+  Visible := False;
+end;
+
+
+procedure TKMPortraitDockChrome.Paint;
+const
+  // Pure wood region inside sprite 404 (stone border starts at x=194)
+  WOOD_SRC_W = 190;
+var
+  xOff, segW, bodyH: Integer;
+begin
+  bodyH := Max(0, Height - DOCK_STONE_H);
+
+  // Seamless tiled wood plank background across the full dock width
+  if bodyH > 0 then
+  begin
+    xOff := 0;
+    while xOff < Width do
+    begin
+      segW := Min(WOOD_SRC_W, Width - xOff);
+      TKMRenderUI.WriteSubPicture(AbsLeft + xOff, AbsTop + DOCK_STONE_H, segW, bodyH,
+                                  rxGui, 404, 0, segW, False, Min(400, bodyH));
+      Inc(xOff, segW);
+    end;
+  end;
+
+  // Horizontal carved stone top divider across the full dock width
+  TKMRenderUI.WriteSubPictureRotated90(AbsLeft, AbsTop, Width, DOCK_STONE_H,
+                                       rxGui, 404, DOCK_COL_W, TOOLBAR_WIDTH);
+  TKMRenderUI.WriteLine(AbsLeft, AbsTop, AbsLeft + Width, AbsTop, $FF0A0806, $FFFF, 1);
+  TKMRenderUI.WriteLine(AbsLeft, AbsTop + DOCK_STONE_H, AbsLeft + Width, AbsTop + DOCK_STONE_H, $FF0A0806, $FFFF, 1);
+
+  if not Collapsed then
+  begin
+    // Minimap wooden/gold frame (without baked-in right stone border)
+    TKMRenderUI.WriteSubPicture(AbsLeft + ContentOffsetX, AbsTop + DOCK_STONE_H, DOCK_COL_W, 192,
+                                rxGui, 407, 0, DOCK_COL_W, False, 192);
+    // Center vertical carved stone pillar separating left and right columns
+    TKMRenderUI.WriteSubPicture(AbsLeft + ContentOffsetX + DOCK_COL_W, AbsTop + DOCK_STONE_H,
+                                DOCK_DIVIDER_W, bodyH, rxGui, 404, 200, 214, False, Min(400, bodyH));
+    // Recessed card behind Clock + Speed controls below the 4 main tab buttons
+    TKMRenderUI.WriteBevel(AbsLeft + ContentOffsetX + 6, AbsTop + DOCK_STONE_H + 238,
+                           DOCK_COL_W - 12, 114, 0.35, 0.45);
+  end;
+end;
 
 
 { TKMGamePlayInterface }
@@ -746,7 +832,11 @@ begin
   if (Sender = Button_Main[tbBuild]) or (Sender = Button_Main[tbRatio])
     or (Sender = Button_Main[tbStats]) or (Sender = Button_Main[tbMenu])
     or (Sender = Button_Menu_Settings) or (Sender = Button_Menu_Quit) then
+  begin
     gMySpectator.Selected := nil;
+    if fIsBottomDock and fBottomDockCollapsed then
+      SetBottomDockCollapsed(False);
+  end;
 
   // Set LastVisiblePage to which ever page was last visible, out of the ones needed
   if fGuiMenuOptions.Visible then LastVisiblePage := fGuiMenuOptions else
@@ -938,8 +1028,8 @@ procedure TKMGamePlayInterface.GameOptionsChanged;
 var
   oldIndex: Integer;
 begin
-  if Panel_Sidebar.RenderScale <> gGameSettings.SidebarScale then
-    Resize(fViewport.ViewRect.Right, fViewport.ViewRect.Bottom);
+  if (not fIsBottomDock) and (Panel_Sidebar.RenderScale <> gGameSettings.SidebarScale) then
+    Resize(fViewport.ScreenWidth, fViewport.ScreenHeight);
 
   oldIndex := Radio_PlayersColorMode.ItemIndex;
   //Update player color mode radio
@@ -992,6 +1082,7 @@ begin
 
   Panel_Sidebar     := TKMPanel.Create(Panel_Main, 0,    0, TOOLBAR_WIDTH, Panel_Main.Height);
   Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
+  Dock_Chrome       := TKMPortraitDockChrome.Create(Panel_Sidebar);
   Sidebar_Top       := TKMImage.Create(Panel_Sidebar, 0,    0, 224, 200, 407);
   Sidebar_Middle    := TKMImage.Create(Panel_Sidebar, 0,  200, 224, 168, 554);
 
@@ -1000,15 +1091,26 @@ begin
   MinimapView.OnClickRight := Minimap_RightClick;
   MinimapView.OnMinimapClick := Minimap_Click; // For placing beacons
 
-  Image_Clock := TKMImage.Create(Panel_Main,232,8,67,65,556);
+  Button_DockToggle := TKMButton.Create(Panel_Sidebar, 0, 1, 56, 18, 590, rxGui, bsGame);
+  Button_DockToggle.OnClick := DockToggle_Click;
+  Button_DockToggle.Hide;
+
+  Button_DockExpand := TKMButton.Create(Panel_Sidebar, 0, DOCK_STONE_H + 4, 62, 36, 'Map', bsGame);
+  Button_DockExpand.OnClick := DockToggle_Click;
+  Button_DockExpand.Hide;
+
+  Panel_Clock := TKMPanel.Create(Panel_Main, 232, 8, 220, 100);
+  Panel_Clock.Hitable := False;
+
+  Image_Clock := TKMImage.Create(Panel_Clock, 0, 0, 67, 65, 556);
   Image_Clock.HighlightOnMouseOver := True;
   Image_Clock.OnClick := SpeedCtrl_Click;
   Image_Clock.Hide;
 
-  Label_Time := TKMLabel.Create(Panel_Main,265,80,'mm:ss',fntOutline,taCenter);
+  Label_Time := TKMLabel.Create(Panel_Clock, 33, 72, 'mm:ss', fntOutline, taCenter);
   Label_Time.Hide;
 
-  Label_ClockSpeedActual := TKMLabel.Create(Panel_Main,265,48,0,16,'x1',fntMetal,taCenter);
+  Label_ClockSpeedActual := TKMLabel.Create(Panel_Clock, 33, 40, 0, 16, 'x1', fntMetal, taCenter);
   Label_ClockSpeedActual.Hitable := False;
   Label_ClockSpeedActual.Hide;
   if aUIMode = umReplay then
@@ -1016,7 +1118,7 @@ begin
   else
     Label_ClockSpeedActual.Hint := gResTexts[TX_GAME_UI_GAME_SPEED_ACTUAL];
 
-  Label_ClockSpeedRecorded := TKMLabel.Create(Panel_Main,265,65,0,16,'x1',fntGrey,taCenter);
+  Label_ClockSpeedRecorded := TKMLabel.Create(Panel_Clock, 33, 57, 0, 16, 'x1', fntGrey, taCenter);
   Label_ClockSpeedRecorded.Hint := gResTexts[TX_GAME_UI_SPEED_RECORDED];
   Label_ClockSpeedRecorded.Hitable := False;
   Label_ClockSpeedRecorded.Hide;
@@ -1131,19 +1233,41 @@ procedure TKMGamePlayInterface.Resize(X,Y: Word);
 const
   PANEL_MIN_HEIGHT = 750;
 var
-  I, visH, tbW: Integer;
+  I, visH, tbW, mainW, mainH: Integer;
+  dockLogicalH, dockLogicalVisW, barRowW, barLeft: Integer;
+  dockScale: Single;
   showSwords: Boolean;
+  chrome: TKMPortraitDockChrome;
 begin
-  Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
+  mainW := Max(1, Integer(X) - GetSafeInsetLeft - GetSafeInsetRight);
+  mainH := Y;
+  {$IFDEF ANDROID}
+  fIsBottomDock := (mainH > mainW);
+  {$ELSE}
+  fIsBottomDock := False;
+  {$ENDIF}
+
+  if fIsBottomDock then
+  begin
+    // Fit the full 410x380 split dock without any vertical scrolling, capped at 45% height on shorter portrait screens
+    dockScale := Min(mainW / DOCK_LOGICAL_W, (mainH * DOCK_MAX_HEIGHT_RATIO) / DOCK_TOTAL_H);
+    dockScale := Max(0.5, dockScale);
+    Panel_Sidebar.RenderScale := dockScale;
+    dockLogicalH := IfThen(fBottomDockCollapsed, DOCK_COLLAPSED_H, DOCK_TOTAL_H);
+    fBottomDockHeightPx := Min(mainH - 1, Round(dockLogicalH * dockScale));
+    dockLogicalVisW := Max(DOCK_LOGICAL_W, Round(mainW / dockScale));
+    fBottomDockOffsetX := (dockLogicalVisW - DOCK_LOGICAL_W) div 2;
+  end
+  else
+  begin
+    Panel_Sidebar.RenderScale := gGameSettings.SidebarScale;
+    fBottomDockHeightPx := 0;
+    fBottomDockOffsetX := 0;
+    dockLogicalH := 0;
+    dockLogicalVisW := TOOLBAR_WIDTH;
+  end;
+
   inherited;
-
-  visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
-  tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
-  Panel_Sidebar.Height := visH;
-
-  // Show swords filler if screen height allows
-  showSwords := (visH >= PANEL_MIN_HEIGHT);
-  Sidebar_Middle.Visible := showSwords;
 
   Panel_Stats.Top := (Panel_Main.Height - Panel_Stats.Height) div 2;
   Panel_Stats.Height := Min(Panel_Main.Height, MENU_DESIGN_Y);
@@ -1153,37 +1277,161 @@ begin
   Panel_Stats_Background.Width := X;
   Panel_Stats_Background.Height := Y;
 
-  // Needs to be -10 when the swords are hidden so it fits 1024x576
-  Panel_Controls.Top := Sidebar_Top.Height - 10 + (10+Sidebar_Middle.Height) * Byte(showSwords);
-  Panel_Controls.Height := visH - Panel_Controls.Top;
-  fControlsBaseTop := Panel_Controls.Top;
-  ApplySidebarScroll;
+  if fIsBottomDock then
+  begin
+    Panel_Sidebar.Left := 0;
+    Panel_Sidebar.Top := Panel_Main.Height - fBottomDockHeightPx;
+    Panel_Sidebar.Width := dockLogicalVisW;
+    Panel_Sidebar.Height := dockLogicalH;
 
-  Image_Chat.Left := tbW;
-  Label_ChatUnread.Left := tbW;
-  Image_MPAllies.Left := tbW;
-  Image_MessageLog.Left := tbW;
-  for I := 0 to MAX_VISIBLE_MSGS do
-    Image_Message[I].Left := tbW;
+    chrome := TKMPortraitDockChrome(Dock_Chrome);
+    chrome.Visible := True;
+    chrome.Width := dockLogicalVisW;
+    chrome.Height := dockLogicalH;
+    chrome.ContentOffsetX := fBottomDockOffsetX;
+    chrome.Collapsed := fBottomDockCollapsed;
 
-  Panel_Message.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_Message.Width));
-  Panel_MessageLog.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_MessageLog.Width));
-  fGuiGameAllies.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 840)));
-  fGuiGameChat.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 600)));
+    Sidebar_Top.Visible := False;
+    Sidebar_Middle.Visible := False;
+    for I := Low(Sidebar_Bottom) to High(Sidebar_Bottom) do
+      Sidebar_Bottom[I].Visible := False;
 
-  Image_Clock.Left := tbW + 8;
-  Label_Time.Left := tbW + 41;
-  Label_ClockSpeedActual.Left := tbW + 41;
-  Label_ClockSpeedRecorded.Left := tbW + 41;
+    Button_DockToggle.Visible := True;
+    Button_DockToggle.Left := (dockLogicalVisW - Button_DockToggle.Width) div 2;
+    Button_DockToggle.Top := 1;
+    Button_DockToggle.TexID := IfThen(fBottomDockCollapsed, 591, 590);
+
+    if not fBottomDockCollapsed then
+    begin
+      Button_DockExpand.Visible := False;
+
+      MinimapView.Visible := True;
+      MinimapView.Left := fBottomDockOffsetX + 10;
+      MinimapView.Top := DOCK_STONE_H + 10;
+
+      Panel_TabBar.Visible := True;
+      Panel_TabBar.Left := fBottomDockOffsetX;
+      Panel_TabBar.Top := DOCK_STONE_H + 192;
+
+      Panel_Controls.Visible := True;
+      Panel_Controls.Left := fBottomDockOffsetX + DOCK_COL_W + DOCK_DIVIDER_W;
+      Panel_Controls.Top := DOCK_STONE_H;
+      Panel_Controls.Width := DOCK_COL_W;
+      Panel_Controls.Height := DOCK_BODY_H;
+    end
+    else
+    begin
+      MinimapView.Visible := False;
+      Panel_Controls.Visible := False;
+
+      barRowW := Button_DockExpand.Width + 10 + DOCK_COL_W;
+      barLeft := Max(0, (dockLogicalVisW - barRowW) div 2);
+      Button_DockExpand.Visible := True;
+      Button_DockExpand.Left := barLeft;
+      Button_DockExpand.Top := DOCK_STONE_H + 4;
+
+      Panel_TabBar.Visible := True;
+      Panel_TabBar.Left := barLeft + Button_DockExpand.Width + 10;
+      Panel_TabBar.Top := DOCK_STONE_H;
+    end;
+
+    fSidebarScroll := 0;
+    fSidebarScrollMax := 0;
+
+    for I := 0 to Panel_Controls.ChildCount - 1 do
+      if Panel_Controls.Childs[I] is TKMPanel then
+      begin
+        Panel_Controls.Childs[I].Top := 0;
+        if anBottom in Panel_Controls.Childs[I].Anchors then
+          Panel_Controls.Childs[I].Height := Panel_Controls.Height;
+      end;
+
+    Image_Chat.Left := 0;
+    Label_ChatUnread.Left := 0;
+    Image_MPAllies.Left := 0;
+    Image_MessageLog.Left := 0;
+    for I := 0 to MAX_VISIBLE_MSGS do
+      Image_Message[I].Left := 0;
+
+    Panel_Message.Left := Max(0, (Panel_Main.Width - Panel_Message.Width) div 2);
+    Panel_MessageLog.Left := Max(0, (Panel_Main.Width - Panel_MessageLog.Width) div 2);
+    fGuiGameAllies.SetLeft(Max(0, (Panel_Main.Width - 840) div 2));
+    fGuiGameChat.SetLeft(Max(0, (Panel_Main.Width - 600) div 2));
+
+    Panel_ReplayBar.Left := 96;
+    Panel_ReplayFOW.Left := 96;
+    Panel_ReplayCtrl.Left := 96;
+
+    Bevel_DebugInfo.Left := 0;
+    Label_DebugInfo.Left := 8;
+  end
+  else
+  begin
+    visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
+    tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
+
+    Panel_Sidebar.Left := 0;
+    Panel_Sidebar.Top := 0;
+    Panel_Sidebar.Width := TOOLBAR_WIDTH;
+    Panel_Sidebar.Height := visH;
+
+    Dock_Chrome.Visible := False;
+    Button_DockToggle.Visible := False;
+    Button_DockExpand.Visible := False;
+
+    Sidebar_Top.Visible := True;
+    MinimapView.Visible := True;
+    MinimapView.Left := 10;
+    for I := Low(Sidebar_Bottom) to High(Sidebar_Bottom) do
+      Sidebar_Bottom[I].Visible := True;
+
+    // Show swords filler if screen height allows
+    showSwords := (visH >= PANEL_MIN_HEIGHT);
+    Sidebar_Middle.Visible := showSwords;
+
+    Panel_Controls.Visible := True;
+    Panel_Controls.Left := 0;
+    Panel_Controls.Width := TOOLBAR_WIDTH;
+    // Needs to be -10 when the swords are hidden so it fits 1024x576
+    Panel_Controls.Top := Sidebar_Top.Height - 10 + (10+Sidebar_Middle.Height) * Byte(showSwords);
+    Panel_Controls.Height := visH - Panel_Controls.Top;
+    fControlsBaseTop := Panel_Controls.Top;
+    Panel_TabBar.Visible := True;
+    Panel_TabBar.Left := 0;
+    ApplySidebarScroll;
+
+    for I := 0 to Panel_Controls.ChildCount - 1 do
+      if Panel_Controls.Childs[I] is TKMPanel then
+      begin
+        Panel_Controls.Childs[I].Top := 44;
+        if anBottom in Panel_Controls.Childs[I].Anchors then
+          Panel_Controls.Childs[I].Height := Panel_Controls.Height - 44;
+      end;
+
+    Image_Chat.Left := tbW;
+    Label_ChatUnread.Left := tbW;
+    Image_MPAllies.Left := tbW;
+    Image_MessageLog.Left := tbW;
+    for I := 0 to MAX_VISIBLE_MSGS do
+      Image_Message[I].Left := tbW;
+
+    Panel_Message.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_Message.Width));
+    Panel_MessageLog.Left := Max(0, Min(tbW, Panel_Main.Width - Panel_MessageLog.Width));
+    fGuiGameAllies.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 840)));
+    fGuiGameChat.SetLeft(Max(0, Min(tbW, Panel_Main.Width - 600)));
+
+    Panel_ReplayBar.Left := Max(320, tbW + 96);
+    Panel_ReplayFOW.Left := Max(320, tbW + 96);
+    Panel_ReplayCtrl.Left := Max(320, tbW + 96);
+
+    Bevel_DebugInfo.Left := tbW + 8 - 10;
+    Label_DebugInfo.Left := tbW + 8;
+  end;
+
+  UpdateMessageImages;
+  UpdateClockAndSpeedPos;
   UpdateSpeedCtrlUI;
   UpdateCtrlGroupsUI;
-
-  Panel_ReplayBar.Left := Max(320, tbW + 96);
-  Panel_ReplayFOW.Left := Max(320, tbW + 96);
-  Panel_ReplayCtrl.Left := Max(320, tbW + 96);
-
-  Bevel_DebugInfo.Left := tbW + 8 - 10;
-  Label_DebugInfo.Left := tbW + 8;
 
   UpdateOverlayControls;
 
@@ -1208,6 +1456,13 @@ procedure TKMGamePlayInterface.ApplySidebarScroll;
 var
   visH: Integer;
 begin
+  if fIsBottomDock then
+  begin
+    fSidebarScroll := 0;
+    fSidebarScrollMax := 0;
+    Exit;
+  end;
+
   visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
   fSidebarScrollMax := Max(0, SIDEBAR_REQUIRED_HEIGHT - visH);
   fSidebarScroll := EnsureRange(fSidebarScroll, 0, fSidebarScrollMax);
@@ -1224,6 +1479,93 @@ begin
   Panel_Controls.Top := fControlsBaseTop - fSidebarScroll;
   // Keep full sidebar height, the part below the screen is reached by scrolling
   Panel_Controls.Height := Max(visH, SIDEBAR_REQUIRED_HEIGHT) - fControlsBaseTop;
+  if Panel_TabBar <> nil then
+    Panel_TabBar.Top := Panel_Controls.Top;
+end;
+
+
+procedure TKMGamePlayInterface.SetBottomDockCollapsed(aCollapsed: Boolean);
+begin
+  if fBottomDockCollapsed = aCollapsed then Exit;
+  fBottomDockCollapsed := aCollapsed;
+  if fIsBottomDock and (fViewport <> nil) then
+    Resize(fViewport.ScreenWidth, fViewport.ScreenHeight);
+end;
+
+
+procedure TKMGamePlayInterface.DockToggle_Click(Sender: TObject);
+begin
+  if Sender = Button_DockExpand then
+    SetBottomDockCollapsed(False)
+  else
+    SetBottomDockCollapsed(not fBottomDockCollapsed);
+end;
+
+
+procedure TKMGamePlayInterface.UpdateClockAndSpeedPos;
+var
+  tbW, cardLeft, cardTop, cardW, cardH: Integer;
+  scale, clkScale, spdScale: Single;
+begin
+  if (Panel_Clock = nil) or (Panel_SpeedCtrl = nil) then Exit;
+
+  if fIsBottomDock and (not fBottomDockCollapsed) and (not Panel_ReplayFOW.Visible) then
+  begin
+    scale := Panel_Sidebar.RenderScale;
+    cardLeft := Round((fBottomDockOffsetX + 6) * scale);
+    cardTop := Panel_Sidebar.Top + Round((DOCK_STONE_H + 238) * scale);
+    cardW := Round((DOCK_COL_W - 12) * scale);
+    cardH := Round(114 * scale);
+
+    clkScale := scale * 0.68;
+    Panel_Clock.RenderScale := clkScale;
+    Panel_Clock.Left := cardLeft + Max(4, Round(8 * scale));
+    Panel_Clock.Top := cardTop + Max(4, Round(6 * scale));
+    Image_Clock.Left := 0;
+    Image_Clock.Top := 0;
+    Label_ClockSpeedActual.Left := 33;
+    Label_ClockSpeedActual.Top := 40;
+    Label_ClockSpeedRecorded.Left := 33;
+    Label_ClockSpeedRecorded.Top := 57;
+    Label_Time.Left := 130;
+    Label_Time.Top := 24;
+
+    spdScale := EnsureRange((cardW - 12) / Panel_SpeedCtrl.Width, 0.7,
+                            Min(scale * 0.9, (cardH - Round(65 * clkScale) - 10) / Panel_SpeedCtrl.Height));
+    Panel_SpeedCtrl.RenderScale := spdScale;
+    Panel_SpeedCtrl.Left := cardLeft + (cardW - Round(Panel_SpeedCtrl.Width * spdScale)) div 2;
+    Panel_SpeedCtrl.Top := cardTop + cardH - Round(Panel_SpeedCtrl.Height * spdScale) - Max(4, Round(6 * scale));
+  end
+  else
+  begin
+    tbW := IfThen(fIsBottomDock, 0, Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale));
+    Panel_Clock.RenderScale := 1;
+    Panel_Clock.Left := tbW + 8;
+    Panel_Clock.Top := 8;
+    Image_Clock.Left := 0;
+    Image_Clock.Top := 0;
+    Label_ClockSpeedActual.Left := 33;
+    Label_ClockSpeedActual.Top := 40;
+    Label_ClockSpeedRecorded.Left := 33;
+    Label_ClockSpeedRecorded.Top := 57;
+    if not Image_Clock.Visible and Label_Time.Visible then
+      Label_Time.Top := 0
+    else
+      Label_Time.Top := 72;
+    Label_Time.Left := 33;
+
+    Panel_SpeedCtrl.RenderScale := 1;
+    if Panel_ReplayFOW.Visible then
+    begin
+      Panel_SpeedCtrl.Left := Panel_Clock.Left;
+      Panel_SpeedCtrl.Top := 100;
+    end
+    else
+    begin
+      Panel_SpeedCtrl.Left := Panel_Clock.Left + Image_Clock.Width + 6;
+      Panel_SpeedCtrl.Top := 10;
+    end;
+  end;
 end;
 
 
@@ -1247,6 +1589,7 @@ function TKMGamePlayInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
 var
   lx, ly: Integer;
 begin
+  if fIsBottomDock then Exit(False);
   lx := X;
   ly := Y;
   MinimapView.ScreenToLocal(lx, ly);
@@ -1857,16 +2200,7 @@ var
 begin
   if (Self = nil) or (Panel_SpeedCtrl = nil) or (gGame = nil) then Exit;
 
-  if Panel_ReplayFOW.Visible then
-  begin
-    Panel_SpeedCtrl.Left := Image_Clock.Left;
-    Panel_SpeedCtrl.Top := 100;
-  end
-  else
-  begin
-    Panel_SpeedCtrl.Left := Image_Clock.Left + Image_Clock.Width + 6;
-    Panel_SpeedCtrl.Top := 10;
-  end;
+  UpdateClockAndSpeedPos;
 
   canChangeSpeed := (fUIMode in [umSP, umReplay]) or SpeedChangeAllowedInMP;
   allowSpeedStep := canChangeSpeed and (gGameParams.IsReplay or gGame.SpeedChangeAllowed);
@@ -2538,17 +2872,21 @@ begin
     for I := Low(Sidebar_Bottom) to High(Sidebar_Bottom) do
       Sidebar_Bottom[I] := TKMImage.Create(Panel_Controls, 0, 400*I, 224, 400, 404);
 
+  // Tab bar sits on top of Panel_Controls in landscape, or under the Minimap in portrait bottom dock
+  Panel_TabBar := TKMPanel.Create(Panel_Sidebar, 0, 368, DOCK_COL_W, 44);
+  Panel_TabBar.Hitable := False;
+
     // Main 4 buttons
     for T := tbBuild to tbMenu do begin
-      Button_Main[T] := TKMButton.Create(Panel_Controls,  TB_PAD + 46 * Byte(T), 4, 42, 36, 439 + Byte(T), rxGui, bsGame);
+      Button_Main[T] := TKMButton.Create(Panel_TabBar, TB_PAD + 46 * Byte(T), 4, 42, 36, 439 + Byte(T), rxGui, bsGame);
       Button_Main[T].Hint := gResTexts[MAIN_BTN_HINT[T]];
       Button_Main[T].OnClick := SwitchPage;
     end;
-    Button_Back := TKMButton.Create(Panel_Controls, TB_PAD, 4, 42, 36, 443, rxGui, bsGame);
+    Button_Back := TKMButton.Create(Panel_TabBar, TB_PAD, 4, 42, 36, 443, rxGui, bsGame);
     Button_Back.OnClick := SwitchPage;
     Button_Back.Hint := gResTexts[TX_MENU_TAB_HINT_GO_BACK];
 
-    Label_MenuTitle := TKMLabel.Create(Panel_Controls, 54, 4, 138, 36, '', fntMetal, taLeft);
+    Label_MenuTitle := TKMLabel.Create(Panel_TabBar, 54, 4, 138, 36, '', fntMetal, taLeft);
     Label_MenuTitle.WordWrap := True;
     Label_MenuTitle.TextVAlign := tvaMiddle;
 
@@ -3620,14 +3958,20 @@ end;
 
 procedure TKMGamePlayInterface.UpdateMessageImages;
 var
-  I: Integer;
+  I, baseBottom: Integer;
 begin
-  Image_MessageLog.Top := Panel_Main.Height - 48
-                                            - IfThen(CanShowAllies, 48)
-                                            - IfThen(CanShowChat, 48);
+  baseBottom := Panel_Main.Height - GetToolbarHeight;
+
+  Image_Chat.Top := baseBottom - 48;
+  Label_ChatUnread.Top := baseBottom - 30;
+  Image_MPAllies.Top := baseBottom - 48 * 2;
+
+  Image_MessageLog.Top := baseBottom - 48
+                                     - IfThen(CanShowAllies, 48)
+                                     - IfThen(CanShowChat, 48);
 
   for I := 0 to MAX_VISIBLE_MSGS do
-    Image_Message[I].Top := Panel_Main.Height - 48 - I * 48
+    Image_Message[I].Top := baseBottom - 48 - I * 48
                             - IfThen(Image_MessageLog.Visible, 48)
                             - IfThen(CanShowChat, 48)
                             - IfThen(CanShowAllies, 48);
@@ -3639,6 +3983,9 @@ var
   isTactic: Boolean;
 begin
   UpdateMessageImages;
+  {$IFDEF ANDROID}
+  UpdateClockUI;
+  {$ENDIF}
 
   AlliesOnPlayerSetup;
 
@@ -3756,11 +4103,6 @@ begin
   end
   else
     Label_ClockSpeedRecorded.Hide;
-
-  if not Image_Clock.Visible and Label_Time.Visible then
-    Label_Time.Top := 8
-  else
-    Label_Time.Top := 80;
 
   // With slow GPUs it will keep old values till next frame, that can take some seconds
   // Thats why we refresh Clock.Caption here
@@ -3966,16 +4308,24 @@ end;
 procedure TKMGamePlayInterface.UpdateOverlayControls;
 var
   overlayTop, overlayLeft: Integer;
+  clockAtTop: Boolean;
 begin
   overlayTop := 12;
-  overlayLeft := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale) + 34;
+  if fIsBottomDock then
+    overlayLeft := 8
+  else
+    overlayLeft := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale) + 34;
 
   if Panel_ReplayFOW.Visible then
     overlayTop := Panel_ReplayFOW.Top + Panel_ReplayFOW.Height - 5;
 
-  overlayTop := Max(overlayTop, IfThen(Label_Time.Visible, 20, 0) + IfThen(Image_Clock.Visible, Image_Clock.Bottom, 0) + 5);
-  if (Panel_SpeedCtrl <> nil) and Panel_SpeedCtrl.Visible then
-    overlayTop := Max(overlayTop, Panel_SpeedCtrl.Top + Panel_SpeedCtrl.Height + 5);
+  clockAtTop := (not fIsBottomDock) or fBottomDockCollapsed or Panel_ReplayFOW.Visible;
+  if clockAtTop then
+  begin
+    overlayTop := Max(overlayTop, IfThen(Label_Time.Visible, 20, 0) + IfThen(Image_Clock.Visible, Panel_Clock.Top + Image_Clock.Height, 0) + 5);
+    if (Panel_SpeedCtrl <> nil) and Panel_SpeedCtrl.Visible then
+      overlayTop := Max(overlayTop, Panel_SpeedCtrl.Top + Round(Panel_SpeedCtrl.Height * Panel_SpeedCtrl.RenderScale) + 5);
+  end;
 
 
   Label_ScriptedOverlay.Top := overlayTop + 19;
@@ -4482,8 +4832,8 @@ function TKMGamePlayInterface.GetToolbarWidth: Integer;
 var
   scale: Single;
 begin
-  // Don't render toolbar when SAVE_MAP_TO_FBO is set
-  if SAVE_MAP_TO_FBO_RENDER then Exit(0);
+  // Don't render toolbar when SAVE_MAP_TO_FBO is set, or when docked at the bottom in portrait mode
+  if SAVE_MAP_TO_FBO_RENDER or fIsBottomDock then Exit(0);
 
   if Panel_Sidebar <> nil then
     scale := Panel_Sidebar.RenderScale
@@ -4493,10 +4843,17 @@ begin
 end;
 
 
+function TKMGamePlayInterface.GetToolbarHeight: Integer;
+begin
+  if SAVE_MAP_TO_FBO_RENDER or (not fIsBottomDock) then Exit(0);
+  Result := fBottomDockHeightPx;
+end;
+
+
 
 function TKMGamePlayInterface.CanShowChat: Boolean;
 begin
-  Result := (fUIMode in [umMP, umSpectate]) or ((fUIMode = umSP) and gScriptEvents.HasConsoleCommands);
+  Result := (fUIMode in [umMP, umSpectate]) or ((fUIMode = umSP) and (gScriptEvents <> nil) and gScriptEvents.HasConsoleCommands);
 end;
 
 
@@ -5448,6 +5805,7 @@ var
 begin
   if gMySpectator.Selected = nil then
   begin
+    fLastSelectedForDock := nil;
     HideUnitHousePage;
     Exit;
   end; 
@@ -5482,7 +5840,17 @@ begin
   end;
 
   if updateNewSelected then
+  begin
+    if fIsBottomDock and fBottomDockCollapsed then
+    begin
+      if gMySpectator.Selected <> fLastSelectedForDock then
+        SetBottomDockCollapsed(False)
+      else
+        Panel_Controls.Visible := False; // Sub-page .Show calls Parent.Show on every tick
+    end;
+    fLastSelectedForDock := gMySpectator.Selected;
     gMySpectator.UpdateNewSelected;
+  end;
 end;
 
 

@@ -264,7 +264,10 @@ end;
 
 function TKMUserInterfaceGame.GetHintPositionBase: TKMPoint;
 begin
-  Result := TKMPoint.New(GetToolbarWidth - GetSafeInsetLeft + 35, Panel_Main.Height);
+  if GetToolbarHeight > 0 then
+    Result := TKMPoint.New(8, Panel_Main.Height - GetToolbarHeight)
+  else
+    Result := TKMPoint.New(GetToolbarWidth - GetSafeInsetLeft + 35, Panel_Main.Height);
 end;
 
 
@@ -535,7 +538,10 @@ procedure TKMUserInterfaceGame.Resize(X, Y: Word);
 begin
   inherited;
   if fViewport <> nil then
+  begin
     fViewport.ToolbarWidth := GetToolbarWidth;
+    fViewport.ToolbarHeight := GetToolbarHeight;
+  end;
 end;
 
 

@@ -57,7 +57,9 @@ type
     class procedure WritePicture   (aLeft, aTop, aWidth, aHeight: SmallInt; aAnchors: TKMAnchorsSet; aRX: TRXType; aID: Word;
       aEnabled: Boolean = True; aColor: TColor4 = $FFFF00FF; aLightness: Single = 0);
     class procedure WriteSubPicture(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
-      aSrcX1, aSrcX2: Word; aFlipX: Boolean = False);
+      aSrcX1, aSrcX2: Word; aFlipX: Boolean = False; aSrcY2: Word = 0);
+    class procedure WriteSubPictureRotated90(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
+      aSrcX1, aSrcX2: Word);
     class procedure WritePlot      (aLeft, aTop, aWidth, aHeight: SmallInt; aValues: TKMCardinalArray; aMaxValue: Cardinal;
       aColor: TColor4; aLineWidth: Byte);
     class procedure WriteOutline   (aLeft, aTop, aWidth, aHeight, aLineWidth: SmallInt; Col: TColor4);
@@ -610,16 +612,20 @@ end;
 
 
 class procedure TKMRenderUI.WriteSubPicture(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
-                                            aSrcX1, aSrcX2: Word; aFlipX: Boolean = False);
+                                            aSrcX1, aSrcX2: Word; aFlipX: Boolean = False; aSrcY2: Word = 0);
 var
-  uLeft, uRight, tmp: Single;
+  uLeft, uRight, vBottom, tmp: Single;
 begin
   if (aID = 0) or (aID > High(gGFXData[aRX])) then Exit;
   with gGFXData[aRX, aID] do
   begin
-    if PxWidth = 0 then Exit;
+    if (PxWidth = 0) or (PxHeight = 0) then Exit;
     uLeft  := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX1 / PxWidth);
     uRight := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX2 / PxWidth);
+    if (aSrcY2 > 0) and (aSrcY2 < PxHeight) then
+      vBottom := Tex.v1 + (Tex.v2 - Tex.v1) * (aSrcY2 / PxHeight)
+    else
+      vBottom := Tex.v2;
     if aFlipX then
     begin
       tmp := uLeft;
@@ -633,11 +639,50 @@ begin
       TKMRender.BindTexture(Tex.TexID);
       glColor3f(1, 1, 1);
       glBegin(GL_QUADS);
-        glTexCoord2f(uLeft,  Tex.v1); glVertex2f(0,      0      );
-        glTexCoord2f(uRight, Tex.v1); glVertex2f(aWidth, 0      );
-        glTexCoord2f(uRight, Tex.v2); glVertex2f(aWidth, aHeight);
-        glTexCoord2f(uLeft,  Tex.v2); glVertex2f(0,      aHeight);
+        glTexCoord2f(uLeft,  Tex.v1 ); glVertex2f(0,      0      );
+        glTexCoord2f(uRight, Tex.v1 ); glVertex2f(aWidth, 0      );
+        glTexCoord2f(uRight, vBottom); glVertex2f(aWidth, aHeight);
+        glTexCoord2f(uLeft,  vBottom); glVertex2f(0,      aHeight);
       glEnd;
+    finally
+      glPopMatrix;
+    end;
+  end;
+end;
+
+
+class procedure TKMRenderUI.WriteSubPictureRotated90(aLeft, aTop, aWidth, aHeight: SmallInt; aRX: TRXType; aID: Word;
+                                                     aSrcX1, aSrcX2: Word);
+var
+  uLeft, uRight, vEnd: Single;
+  xOff, segW: Integer;
+begin
+  if (aID = 0) or (aID > High(gGFXData[aRX])) then Exit;
+  with gGFXData[aRX, aID] do
+  begin
+    if (PxWidth = 0) or (PxHeight = 0) then Exit;
+    uLeft  := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX1 / PxWidth);
+    uRight := Tex.u1 + (Tex.u2 - Tex.u1) * (aSrcX2 / PxWidth);
+
+    glPushMatrix;
+    try
+      glTranslatef(aLeft, aTop, 0);
+      TKMRender.BindTexture(Tex.TexID);
+      glColor3f(1, 1, 1);
+      xOff := 0;
+      while xOff < aWidth do
+      begin
+        segW := Min(PxHeight, aWidth - xOff);
+        vEnd := Tex.v1 + (Tex.v2 - Tex.v1) * (segW / PxHeight);
+        glBegin(GL_QUADS);
+          // Rotate 90 deg CCW: map-side edge (uRight) at top, wood-side edge (uLeft) at bottom
+          glTexCoord2f(uRight, Tex.v1); glVertex2f(xOff,        0      );
+          glTexCoord2f(uRight, vEnd  ); glVertex2f(xOff + segW, 0      );
+          glTexCoord2f(uLeft,  vEnd  ); glVertex2f(xOff + segW, aHeight);
+          glTexCoord2f(uLeft,  Tex.v1); glVertex2f(xOff,        aHeight);
+        glEnd;
+        Inc(xOff, segW);
+      end;
     finally
       glPopMatrix;
     end;
