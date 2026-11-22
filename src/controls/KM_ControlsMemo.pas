@@ -82,7 +82,9 @@ type
     property SelectionEnd: Integer read fSelectionEnd write SetSelectionEnd;
 
     function GetVisibleRows: Integer;
+    function CanScroll: Boolean;
     function KeyDown(Key: Word; Shift: TShiftState): Boolean; override;
+
     function KeyUp(Key: Word; Shift: TShiftState): Boolean; override;
     procedure MouseWheel(Sender: TObject; WheelSteps: Integer; var aHandled: Boolean); override;
     procedure MouseDown(X,Y: Integer; Shift: TShiftState; Button: TMouseButton); override;
@@ -225,6 +227,13 @@ function TKMMemo.GetVisibleRows: Integer;
 begin
   Result := Height div fItemHeight;
 end;
+
+
+function TKMMemo.CanScroll: Boolean;
+begin
+  Result := fScrollBar.MaxValue > fScrollBar.MinValue;
+end;
+
 
 
 //fItems.Count or Height has changed
