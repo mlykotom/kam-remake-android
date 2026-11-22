@@ -2097,11 +2097,21 @@ begin
   Panel_CtrlGroups.Visible := shouldShow;
   if not shouldShow then Exit;
 
-  tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
-  availLeft := tbW + 36;
-  availRight := Panel_Main.Width - GetSafeInsetRight - 8;
-  Panel_CtrlGroups.Left := Max(availLeft, (availLeft + availRight - CTRL_GROUP_BAR_W) div 2);
-  Panel_CtrlGroups.Top := Panel_Main.Height - CTRL_GROUP_BTN_H - 8;
+  if fIsBottomDock then
+  begin
+    availLeft := 8;
+    availRight := Panel_Main.Width - 8;
+    Panel_CtrlGroups.Left := Max(availLeft, (availLeft + availRight - CTRL_GROUP_BAR_W) div 2);
+    Panel_CtrlGroups.Top := Max(8, Panel_Main.Height - fBottomDockHeightPx - CTRL_GROUP_BTN_H - 8);
+  end
+  else
+  begin
+    tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
+    availLeft := tbW + 36;
+    availRight := Panel_Main.Width - GetSafeInsetRight - 8;
+    Panel_CtrlGroups.Left := Max(availLeft, (availLeft + availRight - CTRL_GROUP_BAR_W) div 2);
+    Panel_CtrlGroups.Top := Panel_Main.Height - CTRL_GROUP_BTN_H - 8;
+  end;
 
   for I := 0 to CTRL_GROUP_BAR_COUNT - 1 do
   begin
