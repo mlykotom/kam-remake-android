@@ -613,6 +613,7 @@ begin
   if ctrls = nil then Exit(True);
   pt := MousePt(P);
   Result := ((pt.X >= gHostSafeInsetLeft) and (pt.X < GameViewport.ToolbarWidth))
+            or (pt.Y >= GameViewport.ViewRect.Bottom)
             or (ctrls.HitControl(pt.X, pt.Y) <> nil);
 end;
 

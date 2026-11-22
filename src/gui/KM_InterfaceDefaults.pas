@@ -74,6 +74,7 @@ type
     procedure ResetHint;
 
     function GetToolbarWidth: Integer; virtual;
+    function GetToolbarHeight: Integer; virtual;
     function GetSafeInsetLeft: Integer; virtual;
     function GetSafeInsetRight: Integer; virtual;
   public
@@ -87,6 +88,7 @@ type
     function GetMainPanelSize: TKMPoint;
 
     property ToolbarWidth: Integer read GetToolbarWidth;
+    property ToolbarHeight: Integer read GetToolbarHeight;
 
     procedure KeyDown(Key: Word; Shift: TShiftState; aIsFirst: Boolean; var aHandled: Boolean); virtual;
     procedure KeyPress(Key: Char); virtual;
@@ -576,6 +578,12 @@ end;
 
 
 function TKMUserInterfaceCommon.GetToolbarWidth: Integer;
+begin
+  Result := 0;
+end;
+
+
+function TKMUserInterfaceCommon.GetToolbarHeight: Integer;
 begin
   Result := 0;
 end;

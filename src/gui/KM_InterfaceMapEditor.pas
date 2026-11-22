@@ -1291,7 +1291,7 @@ end;
 procedure TKMMapEdInterface.MapEdOptionsWereChanged;
 begin
   if Panel_Sidebar.RenderScale <> gGameSettings.SidebarScale then
-    Resize(fViewport.ViewRect.Right, fViewport.ViewRect.Bottom);
+    Resize(fViewport.ScreenWidth, fViewport.ScreenHeight);
   fMinimap.Update;
 end;
 
