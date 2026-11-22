@@ -7,12 +7,16 @@ const
   DEFAULT_SIDEBAR_SCALE = 1.0;
   DEFAULT_ALLOW_UNSUP_VERSION_SAVE = {$IFDEF DEBUG}True{$ELSE}False{$ENDIF};
   DEFAULT_SHOW_VIDEO_OPTIONS = {$IFDEF VIDEOS}True{$ELSE}False{$ENDIF};
+  HAS_DESKTOP_RESOLUTION_OPTIONS = True;
+  HAS_PLATFORM_UI_SCALE = False;
   PLATFORM_VBO_SUPPORTED = True;
   NEEDS_VBO_UNBIND_AFTER_DRAW = False;
 
 function PlatformSafeInsetLeft: Integer; inline;
 function PlatformSafeInsetRight: Integer; inline;
 function PlatformIsTouchMode: Boolean; inline;
+function PlatformGetUIScale: Single;
+procedure PlatformSetUIScale(aScale: Single);
 function PlatformTimeGet: Cardinal;
 function PlatformTimeGetUsec: Int64;
 
@@ -38,6 +42,19 @@ function PlatformIsTouchMode: Boolean;
 begin
   Result := False;
 end;
+
+
+function PlatformGetUIScale: Single;
+begin
+  Result := 1.0;
+end;
+
+
+procedure PlatformSetUIScale(aScale: Single);
+begin
+  // Desktop window/fullscreen size is controlled by resolution settings
+end;
+
 
 
 function PlatformTimeGet: Cardinal;

@@ -35,7 +35,7 @@ type
 implementation
 uses
   KM_GameSettings, KM_ResTexts, KM_ResFonts, KM_InterfaceGame, KM_Music, KM_Sound, KM_Game, KM_GameParams,
-  KM_GameTypes, KM_RenderUI, KM_InterfaceTypes,
+  KM_GameTypes, KM_RenderUI, KM_InterfaceTypes, KM_Platform,
   KM_Resource;
 
 
@@ -43,11 +43,14 @@ uses
 constructor TKMGUICommonGameOptions.Create(aParent: TKMPanel; aCaption: string; aOnKeysUpdated: TKMEvent);
 const
   W_PNL = 600;
-  H_PNL = 510;
+  H_PNL = 510 + Ord(HAS_PLATFORM_UI_SCALE) * 45;
 begin
   inherited Create;
 
   Form_Settings := TKMForm.Create(aParent.MasterParent, W_PNL, H_PNL, aCaption, fbYellow, False, False);
+  Form_Settings.AnchorsCenter;
+  Form_Settings.Left := (Form_Settings.Parent.Width - Form_Settings.Width) div 2;
+  Form_Settings.Top := (Form_Settings.Parent.Height - Form_Settings.Height) div 2;
   Form_Settings.HandleCloseKey := True;
   Form_Settings.CapOffsetY := -5;
 
@@ -100,9 +103,11 @@ end;
 procedure TKMGUICommonGameOptions.Show;
 begin
   Refresh;
+  Form_Settings.SetPosCenter;
   Form_Settings.Show;
   Form_Settings.Focus; // To be able to handle KeyUp
 end;
+
 
 
 function TKMGUICommonGameOptions.Visible: Boolean;

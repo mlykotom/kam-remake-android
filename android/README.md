@@ -22,10 +22,9 @@ KaM Remake installer from [kamremake.com](https://www.kamremake.com/download/) (
 | two-finger tap | right click |
 | drag on the map | scroll the map (while a road/field/editor tool is active: draw with it) |
 | pinch / two-finger drag | zoom / scroll |
-| vertical drag on the left panel | scroll the panel when it does not fit the screen (independent `Sidebar scale [%]` in Settings) |
+| vertical drag on the left panel | scroll the panel when it does not fit the screen (left sidebar opts out of Android edge-back gesture; adjust `Interface scale (%)` and `Sidebar scale (%)` in Options) |
 | top-left speed bar | pause / resume and `x1`..`x10` game speed controls |
-| Back button | Esc (skip video, cancel house preview, close panel) |
-| three-finger tap | interface scale (0.5–2.0) |
+| Back button / right-edge swipe | Esc (skip video, cancel house preview, close panel) |
 
 USB/Bluetooth mouse and keyboard work as on PC.
 

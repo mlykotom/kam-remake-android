@@ -7,18 +7,22 @@ const
   DEFAULT_SIDEBAR_SCALE = 1.25;
   DEFAULT_ALLOW_UNSUP_VERSION_SAVE = True;
   DEFAULT_SHOW_VIDEO_OPTIONS = True;
+  HAS_DESKTOP_RESOLUTION_OPTIONS = False;
+  HAS_PLATFORM_UI_SCALE = True;
   PLATFORM_VBO_SUPPORTED = {$IFDEF ANDROID_NOVBO}False{$ELSE}True{$ENDIF};
   NEEDS_VBO_UNBIND_AFTER_DRAW = True;
 
 function PlatformSafeInsetLeft: Integer; inline;
 function PlatformSafeInsetRight: Integer; inline;
 function PlatformIsTouchMode: Boolean; inline;
+function PlatformGetUIScale: Single;
+procedure PlatformSetUIScale(aScale: Single);
 function PlatformTimeGet: Cardinal;
 function PlatformTimeGetUsec: Int64;
 
 implementation
 uses
-  KMAndroidHost;
+  Math, KMAndroidHost;
 
 type
   TKMTimeSpec = record
@@ -58,6 +62,23 @@ function PlatformIsTouchMode: Boolean;
 begin
   Result := gHostTouchMode;
 end;
+
+
+function PlatformGetUIScale: Single;
+begin
+  Result := gHostUIScale;
+end;
+
+
+procedure PlatformSetUIScale(aScale: Single);
+begin
+  aScale := EnsureRange(aScale, 0.5, 2.0);
+  if Abs(gHostUIScale - aScale) < 0.001 then Exit;
+  gHostUIScale := aScale;
+  if Assigned(gHostSetUIScale) then
+    gHostSetUIScale(aScale);
+end;
+
 
 
 function PlatformTimeGet: Cardinal;

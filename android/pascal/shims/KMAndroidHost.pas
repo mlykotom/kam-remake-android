@@ -14,6 +14,7 @@ type
   TKMHostPlayVideo = procedure(const aPath: UnicodeString; aVolume: Integer; aStretch: Boolean);
   TKMHostStopVideo = procedure;
   TKMHostHaptic = procedure;
+  TKMHostSetUIScale = procedure(aScale: Single);
 
 var
   // Pointer position in render area coordinates
@@ -24,6 +25,7 @@ var
   gHostScreenHeight: Integer = 1080;
   gHostSafeInsetLeft: Integer = 0;
   gHostSafeInsetRight: Integer = 0;
+  gHostUIScale: Single = 1.0;
   gHostAppActive: Boolean = True;
   gHostTouchMode: Boolean = True;
 
@@ -42,6 +44,8 @@ var
   gHostPlayVideo: TKMHostPlayVideo;
   gHostStopVideo: TKMHostStopVideo;
   gHostHaptic: TKMHostHaptic;
+  gHostSetUIScale: TKMHostSetUIScale;
+
 
 
 

@@ -1,5 +1,6 @@
 package org.kamremake.android
 
+import android.graphics.Rect
 import android.os.SystemClock
 import android.text.InputType
 import android.view.InputDevice
@@ -8,6 +9,7 @@ import android.view.MotionEvent
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import androidx.core.view.ViewCompat
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -27,12 +29,15 @@ internal class KaMView(
     @Volatile private var virtW = 0
     @Volatile private var virtH = 0
     @Volatile private var inGame = false
+    @Volatile private var virtToolbarWidth = 0
     @Volatile private var touchScaleX = 1f
     @Volatile private var touchScaleY = 1f
     @Volatile private var cutoutLeftPx = 0
     @Volatile private var cutoutRightPx = 0
     @Volatile private var virtSafeLeft = 0
     @Volatile private var virtSafeRight = 0
+    private var pendingUiScale: Float? = null
+    private var isPointerDown = false
     private var engineStarted = false
     private var engineFailed = false
     private var textInputShown = false
@@ -71,11 +76,41 @@ internal class KaMView(
             val sr = virtSafeRight
             queueEvent { KaMNative.setSafeInsets(sl, sr) }
         }
+        updateGestureExclusions()
     }
 
     fun setUiScale(scale: Float) {
-        uiScale = scale
-        applyVirtualSize()
+        val clamped = scale.coerceIn(0.5f, 2.0f)
+        pendingUiScale = clamped
+        queueEvent { KaMNative.setUiScale(clamped) }
+        if (!isPointerDown) {
+            applyPendingUiScale()
+        }
+    }
+
+    private fun applyPendingUiScale() {
+        val next = pendingUiScale ?: return
+        pendingUiScale = null
+        if (next != uiScale) {
+            uiScale = next
+            applyVirtualSize()
+        }
+    }
+
+    private fun updateGestureExclusions() {
+        val rects = calculateGestureExclusionBounds(
+            viewWidth = width,
+            viewHeight = height,
+            inGame = inGame,
+            virtToolbarWidth = virtToolbarWidth,
+            touchScaleX = touchScaleX
+        ).map { Rect(it.left, it.top, it.right, it.bottom) }
+        ViewCompat.setSystemGestureExclusionRects(this, rects)
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        updateGestureExclusions()
     }
 
     fun setCutoutInsets(leftPx: Int, rightPx: Int) {
@@ -90,6 +125,7 @@ internal class KaMView(
         if (w <= 0 || h <= 0) return
         computeVirtualSize(w, h)
         holder.setFixedSize(virtW, virtH)
+        updateGestureExclusions()
     }
 
     // ---------- Renderer (GL thread) ----------
@@ -97,6 +133,7 @@ internal class KaMView(
     override fun onSurfaceChanged(width: Int, height: Int) {
         if (engineFailed) return
         KaMNative.setSafeInsets(virtSafeLeft, virtSafeRight)
+        KaMNative.setUiScale(uiScale)
         if (!engineStarted) {
             engineStarted = true
             if (!KaMNative.init(dataDir, width, height)) {
@@ -115,9 +152,19 @@ internal class KaMView(
         KaMNative.frame()
 
         val ig = KaMNative.inGame()
-        if (ig != inGame) {
+        val tbw = if (ig) KaMNative.toolbarWidth() else 0
+        if (ig != inGame || tbw != virtToolbarWidth) {
+            val inGameChanged = ig != inGame
             inGame = ig
-            activity.runOnUiThread(::applyVirtualSize)
+            virtToolbarWidth = tbw
+            activity.runOnUiThread {
+                if (inGameChanged) {
+                    applyPendingUiScale()
+                    applyVirtualSize()
+                } else {
+                    updateGestureExclusions()
+                }
+            }
         }
 
         val now = SystemClock.uptimeMillis()
@@ -171,21 +218,27 @@ internal class KaMView(
         val x1 = if (count > 1) e.getX(1) * touchScaleX else x0
         val y1 = if (count > 1) e.getY(1) * touchScaleY else y0
         val a = when (action) {
-            MotionEvent.ACTION_DOWN -> 0
-            MotionEvent.ACTION_MOVE -> 1
-            MotionEvent.ACTION_UP -> 2
-            MotionEvent.ACTION_CANCEL -> 3
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                if (count == 3) {
-                    activity.runOnUiThread(activity::showPortSettings)
-                    return true
-                }
-                5
+            MotionEvent.ACTION_DOWN -> {
+                isPointerDown = true
+                0
             }
+            MotionEvent.ACTION_MOVE -> 1
+            MotionEvent.ACTION_UP -> {
+                isPointerDown = false
+                2
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                isPointerDown = false
+                3
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> 5
             MotionEvent.ACTION_POINTER_UP -> 6
             else -> return true
         }
         queueEvent { KaMNative.touch(a, count, x0, y0, x1, y1) }
+        if (!isPointerDown) {
+            applyPendingUiScale()
+        }
         return true
     }
 
@@ -196,6 +249,7 @@ internal class KaMView(
         val y = (e.y * touchScaleY).roundToInt()
         val buttons = e.buttonState
         val changed = buttons xor lastMouseButtons
+        isPointerDown = buttons != 0
         for (m in MOUSE_BUTTON_MAP) {
             if ((changed and m[0]) != 0) {
                 val act = if ((buttons and m[0]) != 0) 0 else 2
@@ -205,6 +259,9 @@ internal class KaMView(
         }
         lastMouseButtons = buttons
         if (changed == 0) queueEvent { KaMNative.mouse(1, 0, x, y) }
+        if (!isPointerDown) {
+            applyPendingUiScale()
+        }
         return true
     }
 
@@ -316,6 +373,13 @@ internal class KaMView(
         val touchScaleY: Float
     )
 
+    internal data class ExclusionBounds(
+        val left: Int,
+        val top: Int,
+        val right: Int,
+        val bottom: Int
+    )
+
     companion object {
         // Minimal game resolution the original UI is designed for
         const val BASE_WIDTH = 1024
@@ -361,6 +425,25 @@ internal class KaMView(
                 touchScaleX = evenW.toFloat() / w,
                 touchScaleY = evenH.toFloat() / h
             )
+        }
+
+        /**
+         * Opts the in-game left sidebar out of Android's inward edge-back swipe gesture so
+         * scrolling the sidebar, dragging ware sliders, or tapping the minimap near the left
+         * edge is never intercepted as Esc/Back. Empty in menus so system Back works normally.
+         */
+        fun calculateGestureExclusionBounds(
+            viewWidth: Int,
+            viewHeight: Int,
+            inGame: Boolean,
+            virtToolbarWidth: Int,
+            touchScaleX: Float
+        ): List<ExclusionBounds> {
+            if (!inGame || virtToolbarWidth <= 0 || viewWidth <= 0 || viewHeight <= 0 || touchScaleX <= 0f) {
+                return emptyList()
+            }
+            val sidebarRightPx = ceil(virtToolbarWidth.toDouble() / touchScaleX).toInt().coerceIn(1, viewWidth)
+            return listOf(ExclusionBounds(0, 0, sidebarRightPx, viewHeight))
         }
     }
 }

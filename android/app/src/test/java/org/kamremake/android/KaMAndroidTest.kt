@@ -279,6 +279,51 @@ class KaMAndroidTest {
     }
 
     @Test
+    fun calculateGestureExclusionBoundsProtectsSidebarOnlyDuringGameplay() {
+        // Menus / fullscreen pages must not exclude system back gestures
+        assertTrue(
+            KaMView.calculateGestureExclusionBounds(
+                viewWidth = 2400,
+                viewHeight = 1080,
+                inGame = false,
+                virtToolbarWidth = 280,
+                touchScaleX = 1280f / 2400f
+            ).isEmpty()
+        )
+        assertTrue(
+            KaMView.calculateGestureExclusionBounds(
+                viewWidth = 2400,
+                viewHeight = 1080,
+                inGame = true,
+                virtToolbarWidth = 0,
+                touchScaleX = 0.5f
+            ).isEmpty()
+        )
+
+        // Gameplay with 125% sidebar (280 virt px) + left cutout (60 virt px = 340 virt px)
+        // at touchScaleX = 0.5 -> physical exclusion covers [0, 0, 680, 1080], leaving right edge free for Back
+        val exclusions = KaMView.calculateGestureExclusionBounds(
+            viewWidth = 2400,
+            viewHeight = 1080,
+            inGame = true,
+            virtToolbarWidth = 340,
+            touchScaleX = 0.5f
+        )
+        assertEquals(1, exclusions.size)
+        assertEquals(KaMView.ExclusionBounds(0, 0, 680, 1080), exclusions[0])
+
+        // Clamps safely to viewWidth on narrow / extreme scale inputs
+        val clamped = KaMView.calculateGestureExclusionBounds(
+            viewWidth = 800,
+            viewHeight = 600,
+            inGame = true,
+            virtToolbarWidth = 500,
+            touchScaleX = 0.25f
+        )
+        assertEquals(KaMView.ExclusionBounds(0, 0, 800, 600), clamped.single())
+    }
+
+    @Test
     fun kamNativeJniSignaturesMatchNativeHost() {
         // Load class without running static init (which loads libkamhost.so)
         val cls = Class.forName("org.kamremake.android.KaMNative", false, javaClass.classLoader)
@@ -295,6 +340,7 @@ class KaMAndroidTest {
         assertStaticMethod("frame", Void.TYPE, expectNative = true)
         assertStaticMethod("resize", Void.TYPE, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("setSafeInsets", Void.TYPE, Int::class.javaPrimitiveType!!, Int::class.javaPrimitiveType!!, expectNative = true)
+        assertStaticMethod("setUiScale", Void.TYPE, Float::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("pause", Void.TYPE, expectNative = true)
         assertStaticMethod("resume", Void.TYPE, expectNative = true)
         assertStaticMethod("shutdown", Void.TYPE, expectNative = true)
@@ -317,6 +363,7 @@ class KaMAndroidTest {
         assertStaticMethod("textInputActive", Boolean::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("videoFinished", Void.TYPE, expectNative = true)
         assertStaticMethod("inGame", Boolean::class.javaPrimitiveType!!, expectNative = true)
+        assertStaticMethod("toolbarWidth", Int::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("textInputBottom", Int::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("textFieldTapped", Boolean::class.javaPrimitiveType!!, expectNative = true)
         assertStaticMethod("selfTest", Void.TYPE, String::class.java, expectNative = true)
@@ -330,5 +377,6 @@ class KaMAndroidTest {
         assertStaticMethod("onPlayVideo", Void.TYPE, String::class.java, Int::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!, expectNative = false)
         assertStaticMethod("onStopVideo", Void.TYPE, expectNative = false)
         assertStaticMethod("onHaptic", Void.TYPE, expectNative = false)
+        assertStaticMethod("onSetUiScale", Void.TYPE, Float::class.javaPrimitiveType!!, expectNative = false)
     }
 }

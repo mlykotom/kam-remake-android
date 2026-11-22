@@ -14,8 +14,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.webkit.MimeTypeMap
@@ -23,10 +21,15 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -37,16 +40,23 @@ class KaMActivity : Activity() {
     private lateinit var dataDir: String
     @Volatile private var engineRunning = false
     private var video: VideoOverlay? = null
+    private var backCallback: OnBackInvokedCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // Use the whole screen including the camera cutout area
-        val lp = window.attributes
-        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        window.attributes = lp
-        @Suppress("DEPRECATION")
-        window.setDecorFitsSystemWindows(false)
+        // Use the whole screen including the camera cutout area (API 28+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val lp = window.attributes
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = lp
+        }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val cb = OnBackInvokedCallback { handleBack() }
+            backCallback = cb
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb)
+        }
         KaMNative.activity = this
 
         root = FrameLayout(this).apply {
@@ -72,7 +82,10 @@ class KaMActivity : Activity() {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         // Optional launch parameter (adb shell am start ... --ef ui_scale 1.5), same as the settings slider
         val extraScale = intent.getFloatExtra(PREF_UI_SCALE, -1f)
-        if (extraScale in 0.5f..2.0f) prefs.edit().putFloat(PREF_UI_SCALE, extraScale).apply()
+        if (extraScale in 0.5f..2.0f) {
+            prefs.edit().putFloat(PREF_UI_SCALE, extraScale).apply()
+            intent.removeExtra(PREF_UI_SCALE)
+        }
         val uiScale = prefs.getFloat(PREF_UI_SCALE, 1.0f)
         val extraCutoutLeft = intent.getIntExtra("cutout_left", -1)
         val extraCutoutRight = intent.getIntExtra("cutout_right", -1)
@@ -81,11 +94,11 @@ class KaMActivity : Activity() {
             kamView.setCutoutInsets(maxOf(0, extraCutoutLeft), maxOf(0, extraCutoutRight))
         }
         view = kamView
-        // Track the soft keyboard height and display cutout safe insets
-        root.setOnApplyWindowInsetsListener { _, insets ->
-            kamView.setImeHeight(insets.getInsets(WindowInsets.Type.ime()).bottom)
+        // Track the soft keyboard height and display cutout safe insets across API 26+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            kamView.setImeHeight(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
             if (extraCutoutLeft < 0 && extraCutoutRight < 0) {
-                val cutout = insets.getInsets(WindowInsets.Type.displayCutout())
+                val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
                 kamView.setCutoutInsets(cutout.left, cutout.right)
             }
             insets
@@ -518,9 +531,9 @@ class KaMActivity : Activity() {
     }
 
     private fun hideSystemBars() {
-        window.insetsController?.let { c ->
-            c.hide(WindowInsets.Type.systemBars())
-            c.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        WindowCompat.getInsetsController(window, root).let { c ->
+            c.hide(WindowInsetsCompat.Type.systemBars())
+            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 
@@ -547,6 +560,10 @@ class KaMActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
+            backCallback = null
+        }
         view?.exit()
         video?.release()
         if (KaMNative.activity === this) KaMNative.activity = null
@@ -666,13 +683,17 @@ class KaMActivity : Activity() {
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    public override fun onBackPressed() {
+    private fun handleBack() {
         if (video?.isPlaying() == true) {
             video?.finish()
             return
         }
         view?.queueEvent(KaMNative::back)
+    }
+
+    @Deprecated("Deprecated in Java")
+    public override fun onBackPressed() {
+        handleBack()
     }
 
     internal fun setSoftKeyboardVisible(visible: Boolean) {
@@ -686,44 +707,16 @@ class KaMActivity : Activity() {
         }
     }
 
-    /** Android-only settings (three finger tap): interface scale */
-    internal fun showPortSettings() {
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val current = prefs.getFloat(PREF_UI_SCALE, 1.0f)
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 24)
+    /** Called by the engine when the user adjusts 'Interface scale (%)' in Options */
+    internal fun onEngineSetUiScale(scale: Float) {
+        val clamped = scale.coerceIn(0.5f, 2.0f)
+        runOnUiThread {
+            getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putFloat(PREF_UI_SCALE, clamped)
+                .apply()
+            view?.setUiScale(clamped)
         }
-        val label = TextView(this).apply {
-            text = String.format("Interface scale: %.2f", current)
-        }
-        val bar = SeekBar(this).apply {
-            // 0.5 .. 2.0 in 0.05 steps. Above 1.0 only the in-game interface grows, menus keep their design size
-            max = 30
-            progress = ((current - 0.5f) / 0.05f).roundToInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {
-                    label.text = String.format("Interface scale: %.2f", 0.5f + p * 0.05f)
-                }
-
-                override fun onStartTrackingTouch(s: SeekBar) {}
-                override fun onStopTrackingTouch(s: SeekBar) {}
-            })
-        }
-        box.addView(label)
-        box.addView(bar)
-
-        AlertDialog.Builder(this)
-            .setTitle("KaM Remake for Android")
-            .setView(box)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val scale = 0.5f + bar.progress * 0.05f
-                prefs.edit().putFloat(PREF_UI_SCALE, scale).apply()
-                view?.setUiScale(scale)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     companion object {

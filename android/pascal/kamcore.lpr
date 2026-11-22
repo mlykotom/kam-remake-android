@@ -373,6 +373,7 @@ exports
   kam_frame,
   kam_resize,
   kam_set_safe_insets,
+  kam_set_ui_scale,
   kam_pause,
 
   kam_resume,
@@ -386,7 +387,9 @@ exports
   kam_text_input_active,
   kam_video_finished,
   kam_in_game,
+  kam_toolbar_width,
   kam_text_input_bottom,
+
   kam_text_field_tapped,
   kam_selftest;
 
