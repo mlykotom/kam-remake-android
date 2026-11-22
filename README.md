@@ -59,6 +59,7 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 | **Tap active build tool again** | Toggle build/road/field/demolish tool off |
 | **Drag building preview** | Move building footprint tile-by-tile before confirming (`✓` / `✗`) |
 | **One-finger drag on map** | Pan camera (or paint continuously when Road / Field / Editor brush is active) |
+| **Vertical swipe / fling on lists & sidebar** | Direct finger-drag and inertial momentum scrolling in lists, text boxes, scroll panels, and the left sidebar |
 | **Double-tap on map** | Right-click (move/attack order; **hold & drag on 2nd tap** to pick troop facing) |
 | **Long-press (250 ms)** | Right-click on map or right-clickable UI (Market/Storehouse `±10`, flags; **hold & drag** for troop facing) |
 | **Two-finger tap** | Right-click |

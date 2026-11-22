@@ -113,10 +113,13 @@ type
   private
     // Left toolbar column scrolls vertically when the screen is shorter than the editor needs
     fSideScroll, fSideScrollMax: Integer;
+    fSideScrollShowUntil: Cardinal;
 
     fSideCtrls: array of TKMControl;
     procedure SideUnscroll;
     procedure SideSnapshotAndScroll;
+    procedure PaintSidebarScrollIndicator;
+
   protected
     Panel_Sidebar: TKMPanel;
     MinimapView: TKMMinimapView;
@@ -174,6 +177,8 @@ type
 
 	  procedure HistoryUndoRedo;
     procedure HistoryAddCheckpoint;
+    function GetSidebarRenderScale: Single;
+
 
     procedure SyncUI(aMoveViewport: Boolean = True); override;
     procedure UpdateHotkeys; override;
@@ -192,9 +197,10 @@ uses
   KM_Resource, KM_ResHouses, KM_TerrainDeposits, KM_ResKeys, KM_GameApp,
   KM_AIDefensePos, KM_RenderUI, KM_ResFonts, KM_CommonClasses, KM_UnitWarrior,
   KM_InterfaceDefaults, KM_Units, KM_UnitGroup, KM_Terrain, KM_Maps,
-  KM_Utils, KM_CommonUtils,
+  KM_Platform, KM_Utils, KM_CommonUtils,
   KM_UnitGroupTypes,
   KM_ResTypes;
+
 
 const
   INFO_SHOW_TIME = 3000; // in ms
@@ -1776,6 +1782,48 @@ begin
 end;
 
 
+function TKMMapEdInterface.GetSidebarRenderScale: Single;
+begin
+  Result := Panel_Sidebar.RenderScale;
+end;
+
+
+procedure TKMMapEdInterface.PaintSidebarScrollIndicator;
+var
+  nowTick, remMs: Cardinal;
+  fade, scale: Single;
+  visH, totalH, trackTop, trackBottom, trackH, thumbH, thumbTop, thumbX: Integer;
+  trackAlpha, thumbAlpha: Cardinal;
+begin
+  if not PlatformIsTouchMode or not Panel_Sidebar.Visible or (fSideScrollMax <= 0) then Exit;
+  nowTick := TimeGet;
+  if nowTick >= fSideScrollShowUntil then Exit;
+
+  remMs := fSideScrollShowUntil - nowTick;
+  if remMs >= 300 then
+    fade := 1.0
+  else
+    fade := remMs / 300.0;
+
+  scale := Panel_Sidebar.RenderScale;
+  visH := Max(1, Round(Panel_Main.Height / scale));
+  totalH := visH + fSideScrollMax;
+  trackTop := Max(8, Round(250 * scale));
+  trackBottom := Panel_Main.Height - 6;
+  trackH := trackBottom - trackTop;
+  if trackH < 24 then Exit;
+
+  thumbH := Max(18, Round(trackH * (visH / totalH)));
+  thumbTop := trackTop + Round(((trackH - thumbH) * fSideScroll) / fSideScrollMax);
+  thumbX := Panel_Main.AbsLeft + GetToolbarWidth - GetSafeInsetLeft - Round(SIDEBAR_STONE_BORDER_W * scale) - 5;
+
+  trackAlpha := Cardinal(Round($38 * fade)) shl 24;
+  thumbAlpha := Cardinal(Round($D0 * fade)) shl 24;
+  TKMRenderUI.WriteShape(thumbX, trackTop, 3, trackH, trackAlpha);
+  TKMRenderUI.WriteShape(thumbX, thumbTop, 3, thumbH, thumbAlpha or $00A8CCF0);
+end;
+
+
 procedure TKMMapEdInterface.ScrollSidebar(aDelta: Integer);
 var
   I, newScroll: Integer;
@@ -1785,7 +1833,9 @@ begin
   for I := 0 to High(fSideCtrls) do
     fSideCtrls[I].Top := fSideCtrls[I].Top + fSideScroll - newScroll;
   fSideScroll := newScroll;
+  fSideScrollShowUntil := TimeGet + 900;
 end;
+
 
 
 function TKMMapEdInterface.IsOverScrollableSidebar(X, Y: Integer): Boolean;
@@ -1846,7 +1896,9 @@ begin
     fPaintDefences := True;
 
   inherited;
+  PaintSidebarScrollIndicator;
 end;
+
 
 
 end.

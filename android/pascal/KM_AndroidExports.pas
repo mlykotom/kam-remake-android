@@ -66,7 +66,9 @@ uses
   KM_Main, KM_GameApp, KM_Defaults, KM_Points, KM_Cursor, KM_System, KM_HandSpectator, KM_HandsCollection,
 
   KM_InterfaceDefaults, KM_InterfaceGame, KM_InterfaceGamePlay, KM_InterfaceMapEditor, KM_Game, KM_Viewport,
-  KM_Controls, KM_ControlsBase, KM_ControlsEdit,
+  KM_Controls, KM_ControlsBase, KM_ControlsEdit, KM_ControlsList, KM_ControlsMemo, KM_ControlsScroll, KM_ControlsTrackBar,
+
+
   KM_Log, dglOpenGL, KM_ResSprites, KM_ResTypes, KM_Video, KM_Render,
   KM_AndroidSelfTest,
   KMAndroidHost, KMAndroidLog;
@@ -318,6 +320,8 @@ end;
 
 
 procedure CheckLongPress; forward;
+procedure UpdateScrollMomentum; forward;
+
 
 var
   fLastGLErrorLog: QWord;
@@ -440,7 +444,9 @@ procedure kam_frame; cdecl;
 begin
   if (gMain = nil) or not gMain.Started then Exit;
   try
+    UpdateScrollMomentum;
     CheckSynchronize;
+
     CheckLongPress;
     if SelfTestActive then
       SelfTestFrame;
@@ -606,6 +612,246 @@ end;
 
 var
   fScrollTarget: TObject;
+  fScrollInterface: TObject;
+  fScrollAccumPx: Single;
+  fScrollVelPxPerSec: Single;
+  fLastScrollMoveTime: QWord;
+  fMomentumActive: Boolean;
+  fLastMomentumTime: QWord;
+  fLastUITap: Boolean;
+  fLastUITapPos: TPointF;
+  fLastUITapTime: QWord;
+
+
+// Scrollable list/memo/panel or left sidebar under the point (inner scrollable control takes priority)
+function ScrollableTargetAt(const P: TPointF): TObject;
+var
+  ctrls: TKMMasterControl;
+  pt: TPoint;
+  ctrl, walk: TKMControl;
+begin
+  Result := nil;
+  ctrls := ActiveControls;
+  if ctrls <> nil then
+  begin
+    pt := MousePt(P);
+    ctrl := ctrls.HitControl(pt.X, pt.Y);
+    // Let direct scrollbar thumb/button and horizontal slider drags use standard UI dragging
+    if (ctrl <> nil)
+    and ((ctrl is TKMScrollBar) or (ctrl is TKMTrackBar) or ((ctrl.Parent <> nil) and (ctrl.Parent is TKMScrollBar))) then
+      Exit(nil);
+
+    walk := ctrl;
+    while walk <> nil do
+    begin
+      if (walk is TKMListBox) and (TKMListBox(walk).RowCount > TKMListBox(walk).GetVisibleRows) then
+        Exit(walk);
+      if (walk is TKMColumnBox) and (TKMColumnBox(walk).RowCount > TKMColumnBox(walk).GetVisibleRows) then
+        Exit(walk);
+      if (walk is TKMMemo) and TKMMemo(walk).CanScroll then
+        Exit(walk);
+      if (walk is TKMScrollPanel)
+      and TKMScrollPanel(walk).ScrollV.Visible
+      and (TKMScrollPanel(walk).ScrollV.MaxValue > TKMScrollPanel(walk).ScrollV.MinValue) then
+        Exit(walk);
+      walk := walk.Parent;
+    end;
+  end;
+
+  Result := ScrollableSidebarAt(P);
+end;
+
+
+function IsControlLiveInPanel(aPanel: TKMPanel; aTarget: TKMControl): Boolean;
+var
+  I: Integer;
+  child: TKMControl;
+begin
+  Result := False;
+  if (aPanel = nil) or not aPanel.IsSetVisible then Exit;
+  if aPanel = aTarget then Exit(True);
+  for I := 0 to aPanel.ChildCount - 1 do
+  begin
+    child := aPanel.Childs[I];
+    if not child.IsSetVisible then Continue;
+    if child = aTarget then Exit(True);
+    if (child is TKMPanel) and IsControlLiveInPanel(TKMPanel(child), aTarget) then
+      Exit(True);
+  end;
+end;
+
+
+function IsScrollTargetValid(aTarget, aInterface: TObject): Boolean;
+var
+  ctrls: TKMMasterControl;
+begin
+  Result := False;
+  if (aTarget = nil) or (gGameApp = nil) or (gGameApp.ActiveInterface <> aInterface) then Exit;
+  if (aTarget is TKMGamePlayInterface) or (aTarget is TKMMapEdInterface) then
+    Exit((gGame <> nil) and (gGameApp.ActiveInterface = aTarget));
+  if aTarget is TKMControl then
+  begin
+    ctrls := ActiveControls;
+    Result := (ctrls <> nil) and IsControlLiveInPanel(ctrls.MasterPanel, TKMControl(aTarget));
+  end;
+end;
+
+
+function ApplyScrollTargetDelta(aTarget, aInterface: TObject; var aAccumPx: Single; aDeltaPx: Single): Boolean;
+var
+  unitPx, totalPx: Single;
+  steps, oldPos, newPos: Integer;
+begin
+  Result := False;
+  if not IsScrollTargetValid(aTarget, aInterface) then Exit;
+
+  totalPx := aAccumPx + aDeltaPx;
+  if aTarget is TKMGamePlayInterface then
+  begin
+    unitPx := Max(1.0, TKMGamePlayInterface(aTarget).GetSidebarRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    oldPos := TKMGamePlayInterface(aTarget).SidebarScroll;
+    TKMGamePlayInterface(aTarget).ScrollSidebar(Round(steps * unitPx));
+    Result := TKMGamePlayInterface(aTarget).SidebarScroll <> oldPos;
+    Exit;
+  end;
+
+  if aTarget is TKMMapEdInterface then
+  begin
+    unitPx := Max(1.0, TKMMapEdInterface(aTarget).GetSidebarRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    TKMMapEdInterface(aTarget).ScrollSidebar(Round(steps * unitPx));
+    Result := True;
+    Exit;
+  end;
+
+  if aTarget is TKMListBox then
+  begin
+    unitPx := Max(1.0, TKMListBox(aTarget).ItemHeight * TKMListBox(aTarget).EffectiveRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    oldPos := TKMListBox(aTarget).TopIndex;
+    newPos := EnsureRange(oldPos + steps, 0, Max(0, TKMListBox(aTarget).RowCount - TKMListBox(aTarget).GetVisibleRows));
+    TKMListBox(aTarget).TopIndex := newPos;
+    Result := newPos <> oldPos;
+    Exit;
+  end;
+
+  if aTarget is TKMColumnBox then
+  begin
+    unitPx := Max(1.0, TKMColumnBox(aTarget).ItemHeight * TKMColumnBox(aTarget).EffectiveRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    oldPos := TKMColumnBox(aTarget).TopIndex;
+    newPos := EnsureRange(oldPos + steps, 0, Max(0, TKMColumnBox(aTarget).RowCount - TKMColumnBox(aTarget).GetVisibleRows));
+    TKMColumnBox(aTarget).TopIndex := newPos;
+    Result := newPos <> oldPos;
+    Exit;
+  end;
+
+  if aTarget is TKMMemo then
+  begin
+    unitPx := Max(1.0, TKMMemo(aTarget).ItemHeight * TKMMemo(aTarget).EffectiveRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    oldPos := TKMMemo(aTarget).TopIndex;
+    TKMMemo(aTarget).TopIndex := EnsureRange(oldPos + steps, Low(SmallInt), High(SmallInt));
+    Result := TKMMemo(aTarget).TopIndex <> oldPos;
+    Exit;
+  end;
+
+  if aTarget is TKMScrollPanel then
+  begin
+    unitPx := Max(1.0, TKMScrollPanel(aTarget).EffectiveRenderScale);
+    steps := Trunc(totalPx / unitPx);
+    if steps = 0 then begin aAccumPx := totalPx; Exit(True); end;
+    aAccumPx := totalPx - steps * unitPx;
+    oldPos := TKMScrollPanel(aTarget).ScrollV.Position;
+    newPos := EnsureRange(oldPos + steps, TKMScrollPanel(aTarget).ScrollV.MinValue, TKMScrollPanel(aTarget).ScrollV.MaxValue);
+    TKMScrollPanel(aTarget).ScrollV.Position := newPos;
+    Result := newPos <> oldPos;
+  end;
+end;
+
+
+procedure StopScrollMomentum;
+begin
+  fMomentumActive := False;
+  fScrollVelPxPerSec := 0;
+  fScrollAccumPx := 0;
+end;
+
+
+procedure RecordScrollMove(aDeltaY: Single);
+var
+  nowMs, dtMs: QWord;
+  instVel: Single;
+begin
+  nowMs := GetTickCount64;
+  dtMs := nowMs - fLastScrollMoveTime;
+  fLastScrollMoveTime := nowMs;
+  ApplyScrollTargetDelta(fScrollTarget, fScrollInterface, fScrollAccumPx, aDeltaY);
+  if (dtMs > 0) and (dtMs <= 120) then
+  begin
+    instVel := EnsureRange((aDeltaY * 1000.0) / dtMs, -4500.0, 4500.0);
+    if fScrollVelPxPerSec = 0 then
+      fScrollVelPxPerSec := instVel
+    else
+      fScrollVelPxPerSec := fScrollVelPxPerSec * 0.35 + instVel * 0.65;
+  end
+  else if dtMs > 120 then
+    fScrollVelPxPerSec := 0;
+end;
+
+
+procedure StartScrollMomentum;
+var
+  nowMs: QWord;
+begin
+  nowMs := GetTickCount64;
+  if (nowMs - fLastScrollMoveTime <= 90)
+  and (Abs(fScrollVelPxPerSec) >= 90.0)
+  and IsScrollTargetValid(fScrollTarget, fScrollInterface) then
+  begin
+    fMomentumActive := True;
+    fLastMomentumTime := nowMs;
+  end
+  else
+    StopScrollMomentum;
+end;
+
+
+procedure UpdateScrollMomentum;
+const
+  FRICTION_PER_SEC = 4.5;
+  MIN_FLING_VEL = 25.0;
+var
+  nowMs: QWord;
+  dtSec: Single;
+begin
+  if not fMomentumActive then Exit;
+  nowMs := GetTickCount64;
+  dtSec := EnsureRange((nowMs - fLastMomentumTime) / 1000.0, 0.001, 0.050);
+  fLastMomentumTime := nowMs;
+
+  if not ApplyScrollTargetDelta(fScrollTarget, fScrollInterface, fScrollAccumPx, fScrollVelPxPerSec * dtSec) then
+  begin
+    StopScrollMomentum;
+    Exit;
+  end;
+
+  fScrollVelPxPerSec := fScrollVelPxPerSec * Exp(-FRICTION_PER_SEC * dtSec);
+  if Abs(fScrollVelPxPerSec) < MIN_FLING_VEL then
+    StopScrollMomentum;
+end;
+
 
 
 function GameViewport: TKMViewport;
@@ -758,18 +1004,37 @@ procedure PerformLeftTap(const P: TPointF);
 var
   isAction: Boolean;
   prevSelected: TObject;
+  tapPt: TPointF;
 begin
-  SendMove(P);
+  tapPt := P;
   if IsOverUI(P) then
-    isAction := IsActionableUI(P)
+  begin
+    if fLastUITap and (GetTickCount64 - fLastUITapTime <= 350) and (Dist(P, fLastUITapPos) <= DOUBLE_TAP_SLOP) then
+    begin
+      tapPt := fLastUITapPos;
+      fLastUITap := False;
+    end
+    else
+    begin
+      fLastUITap := True;
+      fLastUITapPos := P;
+      fLastUITapTime := GetTickCount64;
+    end;
+    isAction := IsActionableUI(tapPt);
+  end
   else
+  begin
+    fLastUITap := False;
     isAction := MapToolActive
                 or ((gSystem <> nil) and (gSystem.Cursor in [kmcInfo, kmcBeacon, kmcJoinYes, kmcPaintBucket]));
+  end;
+  SendMove(tapPt);
   prevSelected := nil;
   if gMySpectator <> nil then
     prevSelected := gMySpectator.Selected;
-  SendDown(mbLeft, P);
-  SendUp(mbLeft, P);
+  SendDown(mbLeft, tapPt);
+  SendUp(mbLeft, tapPt);
+
   // Remember taps on text fields: the host shows the soft keyboard only then
   if (ActiveControls <> nil) and (ActiveControls.HitControl(Round(P.X), Round(P.Y)) is TKMSelectableEdit) then
     fTextFieldTapped := True;
@@ -860,10 +1125,12 @@ begin
           fDownPos := P0;
           fLastPos := P0;
           fDownTime := GetTickCount64;
+          StopScrollMomentum;
           SendMove(P0);
-          if ScrollableSidebarAt(P0) <> nil then
-            // Decide on first move: vertical drag scrolls the sidebar, otherwise it is a click/drag (or long press)
+          if ScrollableTargetAt(P0) <> nil then
+            // Decide on first move: vertical drag scrolls list/memo/panel/sidebar, otherwise tap/drag/long-press
             fTouchState := tsSidebarPending
+
           else
           if IsOverUI(P0) then
           begin
@@ -914,8 +1181,13 @@ begin
               if Abs(P0.Y - fDownPos.Y) >= Abs(P0.X - fDownPos.X) then
               begin
                 fTouchState := tsSidebarScroll;
-                fScrollTarget := ScrollableSidebarAt(fDownPos);
-                ScrollSidebarOf(fScrollTarget, Round(fLastPos.Y - P0.Y));
+                fLastUITap := False;
+                fScrollTarget := ScrollableTargetAt(fDownPos);
+                fScrollInterface := gGameApp.ActiveInterface;
+                fScrollAccumPx := 0;
+                fScrollVelPxPerSec := 0;
+                fLastScrollMoveTime := fDownTime;
+                RecordScrollMove(fLastPos.Y - P0.Y);
               end
               else
               begin
@@ -930,10 +1202,10 @@ begin
             end;
           tsSidebarScroll:
             begin
-              if (gGame <> nil) and (gGameApp.ActiveInterface = fScrollTarget) then
-                ScrollSidebarOf(fScrollTarget, Round(fLastPos.Y - P0.Y));
+              RecordScrollMove(fLastPos.Y - P0.Y);
               fLastPos := P0;
             end;
+
           tsUIPending:
             if Dist(P0, fDownPos) > TAP_SLOP then
             begin
@@ -1031,6 +1303,10 @@ begin
           case fTouchState of
             tsSidebarPending, tsUIPending:
               PerformLeftTap(fDownPos);
+
+            tsSidebarScroll:
+              StartScrollMomentum;
+
 
             tsMapPending:
               if TouchHouseModeActive then

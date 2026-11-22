@@ -246,10 +246,15 @@ type
     Panel_Controls: TKMPanel;
     // Sidebar can be scrolled vertically when the screen is shorter than the sidebar needs
     fSidebarScroll: Integer;
+    fPrevSidebarScroll: Integer;
     fSidebarScrollMax: Integer;
+    fSidebarScrollShowUntil: Cardinal;
+
     fControlsBaseTop: Integer;
   private
     procedure ApplySidebarScroll;
+    procedure PaintSidebarScrollIndicator;
+
   protected
 
       Button_Main: array [tbBuild..tbMenu] of TKMButton; // 4 common buttons + Return
@@ -434,8 +439,11 @@ type
     procedure TouchHouseDragStart(X, Y: Integer);
     procedure TouchHouseDragMove(X, Y: Integer);
     function TouchHouseTap(X, Y: Integer): Boolean;
+    property SidebarScroll: Integer read fSidebarScroll;
     property SidebarScrollMax: Integer read fSidebarScrollMax;
+    function GetSidebarRenderScale: Single;
     procedure SyncUI(aMoveViewport: Boolean = True); override;
+
     procedure UpdateHotkeys; override;
     procedure UpdateState(aGlobalTickCount: Cardinal); override;
     procedure UpdateStateIdle(aFrameTime: Cardinal); override;
@@ -1203,8 +1211,14 @@ begin
   visH := Round(Panel_Main.Height / Panel_Sidebar.RenderScale);
   fSidebarScrollMax := Max(0, SIDEBAR_REQUIRED_HEIGHT - visH);
   fSidebarScroll := EnsureRange(fSidebarScroll, 0, fSidebarScrollMax);
+  if fSidebarScroll <> fPrevSidebarScroll then
+  begin
+    fPrevSidebarScroll := fSidebarScroll;
+    fSidebarScrollShowUntil := TimeGet + 900;
+  end;
 
   Sidebar_Top.Top := -fSidebarScroll;
+
   Sidebar_Middle.Top := Sidebar_Top.Height - fSidebarScroll;
   MinimapView.Top := 10 - fSidebarScroll;
   Panel_Controls.Top := fControlsBaseTop - fSidebarScroll;
@@ -1240,6 +1254,49 @@ begin
             and not ((lx >= MinimapView.AbsLeft) and (lx < MinimapView.AbsLeft + MinimapView.Width)
                      and (ly >= MinimapView.AbsTop) and (ly < MinimapView.AbsTop + MinimapView.Height));
 end;
+
+
+function TKMGamePlayInterface.GetSidebarRenderScale: Single;
+begin
+  Result := Panel_Sidebar.RenderScale;
+end;
+
+
+procedure TKMGamePlayInterface.PaintSidebarScrollIndicator;
+var
+  nowTick, remMs: Cardinal;
+  fade, scale: Single;
+  visH, totalH, trackTop, trackBottom, trackH, thumbH, thumbTop, thumbX: Integer;
+  trackAlpha, thumbAlpha: Cardinal;
+begin
+  if not PlatformIsTouchMode or not Panel_Sidebar.Visible or (fSidebarScrollMax <= 0) then Exit;
+  nowTick := TimeGet;
+  if nowTick >= fSidebarScrollShowUntil then Exit;
+
+  remMs := fSidebarScrollShowUntil - nowTick;
+  if remMs >= 300 then
+    fade := 1.0
+  else
+    fade := remMs / 300.0;
+
+  scale := Panel_Sidebar.RenderScale;
+  visH := Max(1, Round(Panel_Main.Height / scale));
+  totalH := visH + fSidebarScrollMax;
+  trackTop := Max(8, Round(210 * scale));
+  trackBottom := Panel_Main.Height - 6;
+  trackH := trackBottom - trackTop;
+  if trackH < 24 then Exit;
+
+  thumbH := Max(18, Round(trackH * (visH / totalH)));
+  thumbTop := trackTop + Round(((trackH - thumbH) * fSidebarScroll) / fSidebarScrollMax);
+  thumbX := Panel_Main.AbsLeft + GetToolbarWidth - GetSafeInsetLeft - Round(SIDEBAR_STONE_BORDER_W * scale) - 5;
+
+  trackAlpha := Cardinal(Round($38 * fade)) shl 24;
+  thumbAlpha := Cardinal(Round($D0 * fade)) shl 24;
+  TKMRenderUI.WriteShape(thumbX, trackTop, 3, trackH, trackAlpha);
+  TKMRenderUI.WriteShape(thumbX, thumbTop, 3, thumbH, thumbAlpha or $00A8CCF0);
+end;
+
 
 
 
@@ -5821,7 +5878,9 @@ begin
   Label_TeamName.Visible := False; // Only visible while we're using it, otherwise it shows up in other places
 
   inherited;
+  PaintSidebarScrollIndicator;
 end;
+
 
 
 function TKMGamePlayInterface.StatsOpened: Boolean;
