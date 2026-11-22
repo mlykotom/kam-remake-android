@@ -34,7 +34,7 @@ uses
 
 implementation
 uses
-  Math, KM_ResTexts, KM_ResKeys;
+  Math, KM_Platform, KM_ResTexts, KM_ResKeys;
 
 
 function RoundToTilePixel(aVal: Single): Single; inline;
@@ -257,6 +257,7 @@ var
   hotKeyStr: String;
 begin
   Result := aText;
+  if PlatformIsTouchMode then Exit;
   hotKeyStr := gResKeys.GetKeyNameById(aKeyFunc);
   if hotKeyStr <> '' then
     Result := Result + Format(' (''%s'')', [hotKeyStr]);
@@ -268,10 +269,12 @@ var
   hotKeyStr: string;
 begin
   Result := gResTexts[aTextId];
+  if PlatformIsTouchMode then Exit;
   hotKeyStr := Trim(aHotkeyStr);
   if hotKeyStr <> '' then
     Result := Result + Format(' (''%s'')', [hotKeyStr]);
 end;
+
 
 
 function GetHintWHotkey(aTextId: Integer; aKeyFunc: TKMKeyFunction): String;

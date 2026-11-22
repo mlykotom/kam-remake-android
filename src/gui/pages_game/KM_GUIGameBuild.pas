@@ -44,7 +44,7 @@ implementation
 uses
   KM_Defaults, KM_Platform, KM_Utils,
   KM_RenderUI, KM_Cursor, KM_HandsCollection,
-  KM_Resource, KM_ResFonts, KM_ResHouses, KM_ResTexts, KM_ResTypes;
+  KM_Resource, KM_ResFonts, KM_ResHouses, KM_ResTexts, KM_ResTypes, KM_ResWares;
 
 
 { TKMGUIGameBuild }
@@ -189,9 +189,25 @@ begin
 end;
 
 
+function FormatBuildCostHint(aWood, aStone: Word): UnicodeString;
+begin
+  if (aWood > 0) and (aStone > 0) then
+    Result := Format('%d %s, %d %s', [aWood, gRes.Wares[wtTimber].Title, aStone, gRes.Wares[wtStone].Title])
+  else
+  if aWood > 0 then
+    Result := Format('%d %s', [aWood, gRes.Wares[wtTimber].Title])
+  else
+  if aStone > 0 then
+    Result := Format('%d %s', [aStone, gRes.Wares[wtStone].Title])
+  else
+    Result := '';
+end;
+
+
 procedure TKMGUIGameBuild.Show;
 begin
   Panel_Build.Show;
+  UpdateHotkeys;
   UpdateState;
   if PlatformIsTouchMode then
     ClearSelection
@@ -220,31 +236,59 @@ begin
   Button_BuildField.Hint  := GetHintWHotkey(TX_BUILD_FIELD_HINT,  kfPlanField);
   Button_BuildWine.Hint   := GetHintWHotkey(TX_BUILD_WINE_HINT,   kfPlanWine);
   Button_BuildCancel.Hint := GetHintWHotkey(TX_BUILD_CANCEL_HINT, kfErasePlan);
+  if PlatformIsTouchMode then
+  begin
+    Button_BuildRoad.Hint := Button_BuildRoad.Hint + '|' + FormatBuildCostHint(0, 1);
+    Button_BuildWine.Hint := Button_BuildWine.Hint + '|' + FormatBuildCostHint(1, 0);
+  end;
 end;
 
 
 procedure TKMGUIGameBuild.UpdateState;
 var
   I: Integer;
+  ht: TKMHouseType;
+  spec: TKMHouseSpec;
+  costStr: UnicodeString;
 begin
   for I := 1 to GUI_HOUSE_COUNT do
-  if GUIHouseOrder[I] <> htNone then
-  if gMySpectator.Hand.Locks.HouseCanBuild(GUIHouseOrder[I]) then
   begin
-    Button_Build[I].Enable;
-    Button_Build[I].TexID := gRes.Houses[GUIHouseOrder[I]].GUIIcon;
-    Button_Build[I].OnClick := Build_ButtonClick;
-    Button_Build[I].Hint := gRes.Houses[GUIHouseOrder[I]].HouseName + gResTexts[TX_BUILD_HOUSE_POSTFIX];
-  end
-  else
-  begin
-    if Button_Build[I].Down then
-      ClearSelection;
-    Button_Build[I].OnClick := nil;
-    Button_Build[I].TexID := 41;
-    Button_Build[I].Hint := gResTexts[TX_HOUSE_NOT_AVAILABLE]; //Building not available
+    ht := GUIHouseOrder[I];
+    if ht = htNone then Continue;
+    spec := gRes.Houses[ht];
+    if gMySpectator.Hand.Locks.HouseCanBuild(ht) then
+    begin
+      Button_Build[I].Enable;
+      Button_Build[I].TexID := spec.GUIIcon;
+      Button_Build[I].OnClick := Build_ButtonClick;
+      if PlatformIsTouchMode then
+      begin
+        Button_Build[I].Hint := spec.HouseName;
+        costStr := FormatBuildCostHint(spec.WoodCost, spec.StoneCost);
+        if costStr <> '' then
+          Button_Build[I].Hint := Button_Build[I].Hint + '|' + costStr;
+      end
+      else
+        Button_Build[I].Hint := spec.HouseName + gResTexts[TX_BUILD_HOUSE_POSTFIX];
+
+    end
+    else
+    begin
+      if Button_Build[I].Down then
+        ClearSelection;
+      Button_Build[I].OnClick := nil;
+      Button_Build[I].TexID := 41;
+      if PlatformIsTouchMode
+      and not gMySpectator.Hand.Locks.HouseBlocked[ht]
+      and (spec.ReleasedBy <> htNone) then
+        Button_Build[I].Hint := Format('%s|(%s: %s)',
+          [spec.HouseName, gResTexts[TX_HOUSE_NOT_AVAILABLE], gRes.Houses[spec.ReleasedBy].HouseName])
+      else
+        Button_Build[I].Hint := gResTexts[TX_HOUSE_NOT_AVAILABLE]; //Building not available
+    end;
   end;
 end;
+
 
 
 end.

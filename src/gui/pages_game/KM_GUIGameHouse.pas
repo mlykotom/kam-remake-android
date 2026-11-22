@@ -153,7 +153,7 @@ implementation
 uses
   {$IFDEF MSWindows} Windows, {$ENDIF}
   {$IFDEF Unix} LCLIntf, LCLType, {$ENDIF}
-  KM_Defaults, KM_Utils, KM_UtilsExt, KM_Points,
+  KM_Defaults, KM_Platform, KM_Utils, KM_UtilsExt, KM_Points,
   KM_Game, KM_GameInputProcess, KM_Hand, KM_InterfaceTypes,
   KM_HouseBarracks, KM_HouseSchool, KM_HouseTownHall, KM_HouseWoodcutters, KM_HouseStore, KM_HouseArmorWorkshop,
   KM_HandsCollection, KM_HandTypes, KM_HandEntity, KM_RenderUI,
@@ -1247,7 +1247,10 @@ begin
   begin
     tmp := barracks.CheckWareIn(BarracksResType[I]);
     Button_Barracks[I].Caption := IfThen(tmp = 0, '-', IntToKStr(tmp, 1000));
-    Button_Barracks[I].Hint := IfThen(tmp = 0, '', IntToStr(tmp) + ' ' + gRes.Wares[BarracksResType[I]].Title);
+    if tmp = 0 then
+      Button_Barracks[I].Hint := IfThen(PlatformIsTouchMode, gRes.Wares[BarracksResType[I]].Title, '')
+    else
+      Button_Barracks[I].Hint := IntToStr(tmp) + ' ' + gRes.Wares[BarracksResType[I]].Title;
     //Set highlights
     Button_Barracks[I].Down := False;
     for K := 1 to 4 do
@@ -1260,7 +1263,10 @@ begin
 
   tmp := barracks.RecruitsCount;
   Button_BarracksRecruit.Caption := IfThen(tmp = 0, '-', IntToKStr(tmp, 1000));
-  Button_BarracksRecruit.Hint := IfThen(tmp = 0, '', IntToStr(tmp) + ' ' + gRes.Units[utRecruit].GUIName);
+  if tmp = 0 then
+    Button_BarracksRecruit.Hint := IfThen(PlatformIsTouchMode, gRes.Units[utRecruit].GUIName, '')
+  else
+    Button_BarracksRecruit.Hint := IntToStr(tmp) + ' ' + gRes.Units[utRecruit].GUIName;
   Button_BarracksRecruit.Down := True; //Recruit is always enabled, all troops require one
   Image_Barracks_NotAcceptRecruit.Visible := barracks.NotAcceptRecruitFlag;
 
@@ -1584,7 +1590,10 @@ begin
       Button_Market[I].TexID := gRes.Wares[W].GUIIcon;
       tmp := aMarket.GetResTotal(W);
       Button_Market[I].Caption := IfThen(tmp = 0, '-', IntToKStr(tmp, 1000)); // Convert 1234 -> '1k'
-      Button_Market[I].Hint := IfThen(tmp = 0, '', IntToStr(tmp) + ' ' + gRes.Wares[W].Title);
+      if tmp = 0 then
+        Button_Market[I].Hint := IfThen(PlatformIsTouchMode, gRes.Wares[W].Title, '')
+      else
+        Button_Market[I].Hint := IntToStr(tmp) + ' ' + gRes.Wares[W].Title;
     end else
     begin
       Button_Market[I].TexID := 41;
@@ -1678,7 +1687,11 @@ begin
   begin
     tmp := TKMHouseStore(gMySpectator.Selected).CheckWareIn(StoreResType[I]);
     Button_Store[I].Caption := IfThen(tmp = 0, '-', IntToKStr(tmp));
-    Button_Store[I].Hint := IfThen(tmp = 0, '', IntToStr(tmp) + ' ' + gRes.Wares[StoreResType[I]].Title);
+    if tmp = 0 then
+      Button_Store[I].Hint := IfThen(PlatformIsTouchMode, gRes.Wares[StoreResType[I]].Title, '')
+    else
+      Button_Store[I].Hint := IntToStr(tmp) + ' ' + gRes.Wares[StoreResType[I]].Title;
+
     Image_Store_NotAccept[I].Visible := TKMHouseStore(gMySpectator.Selected).NotAcceptFlag[StoreResType[I]];
     Image_Store_NotAllowTakeOut[I].Visible := TKMHouseStore(gMySpectator.Selected).NotAllowTakeOutFlag[StoreResType[I]];
   end;

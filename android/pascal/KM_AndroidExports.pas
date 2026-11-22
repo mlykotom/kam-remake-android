@@ -73,11 +73,12 @@ const
   DOUBLE_TAP_SLOP = 36;   // px (render resolution) max distance between the two taps of a double-tap
   PINCH_SLOP = 32;        // px (render resolution) two-finger movement before becoming a zoom/pan instead of a tap
   LONG_PRESS_MS = 250;    // hold time to become a right button press
+  PEEK_HINT_MS = 300;     // stationary hold time on UI control to show floating tooltip without clicking
   DOUBLE_TAP_MS = 250;    // max time from first tap release to second touch down
   TWO_FINGER_TAP_MS = 300;
 
 type
-  TKMTouchState = (tsIdle, tsUIPending, tsUIDrag, tsMapPending, tsMapPan, tsMapDragLeft, tsRightHold, tsPinch, tsConsumed,
+  TKMTouchState = (tsIdle, tsUIPending, tsUIDrag, tsMapPending, tsMapPan, tsMapDragLeft, tsRightHold, tsHintHold, tsPinch, tsConsumed,
                    tsSidebarPending, tsSidebarScroll, tsHousePreviewPending, tsHousePreviewDrag);
 
 var
@@ -765,6 +766,71 @@ begin
 end;
 
 
+var
+  fLastPeekCtrl: TKMControl;
+
+
+function RawHintControlAt(const P: TPointF): TKMControl;
+var
+  ctrls: TKMMasterControl;
+  pt: TPoint;
+  ctrl: TKMControl;
+begin
+  Result := nil;
+  ctrls := ActiveControls;
+  if ctrls = nil then Exit;
+  pt := MousePt(P);
+  ctrl := ctrls.HitControl(pt.X, pt.Y, True, False);
+  while (ctrl <> nil) and (ctrl.Hint = '') and not (ctrl is TKMPanel) do
+    ctrl := ctrl.Parent;
+  if (ctrl = nil) or (ctrl.Hint = '') then Exit;
+  if (ctrl is TKMSelectableEdit)
+  or (ctrl is TKMPanel)
+  or (ctrl.ClassName = 'TKMTrackBar')
+  or (ctrl.ClassName = 'TKMListBox')
+  or (ctrl.ClassName = 'TKMColumnBox')
+  or ((ctrl.Parent <> nil) and (ctrl.Parent.ClassName = 'TKMScrollBar')) then
+    Exit;
+  Result := ctrl;
+end;
+
+
+function FindPeekHintControl(const P: TPointF): TKMControl;
+begin
+  Result := RawHintControlAt(P);
+  if Result = nil then Exit;
+  if Assigned(Result.OnClickRight) or Assigned(Result.OnClickShift) or Assigned(Result.OnClickHold) then
+    Result := nil;
+end;
+
+
+procedure UpdateTouchPeek(const P: TPointF);
+var
+  ctrl: TKMControl;
+begin
+  if (gGameApp = nil) or (gGameApp.ActiveInterface = nil) then Exit;
+  ctrl := RawHintControlAt(P);
+  if ctrl <> fLastPeekCtrl then
+  begin
+    fLastPeekCtrl := ctrl;
+    gGameApp.ActiveInterface.SetTouchHint(ctrl);
+    if ctrl <> nil then
+      HostHaptic;
+  end
+  else
+  if ctrl <> nil then
+    gGameApp.ActiveInterface.SetTouchHint(ctrl);
+end;
+
+
+procedure ClearTouchPeek;
+begin
+  fLastPeekCtrl := nil;
+  if (gGameApp <> nil) and (gGameApp.ActiveInterface <> nil) then
+    gGameApp.ActiveInterface.ClearTouchHint;
+end;
+
+
 procedure CheckLongPress;
 begin
   if (((fTouchState = tsMapPending) and not GameplayBuildToolActive)
@@ -777,9 +843,26 @@ begin
     HostHaptic;
     SendMove(fDownPos);
     SendDown(mbRight, fDownPos);
+    if IsOverUI(fDownPos) and (gGameApp <> nil) and (gGameApp.ActiveInterface <> nil) then
+      gGameApp.ActiveInterface.SetTouchHint(RawHintControlAt(fDownPos));
     fSecondDownPos := fDownPos;
     fRightHoldMoved := False;
     fTouchState := tsRightHold;
+  end
+  else
+  if (fTouchState in [tsSidebarPending, tsUIDrag])
+  and (Dist(fLastPos, fDownPos) <= TAP_SLOP)
+  and (GetTickCount64 - fDownTime >= PEEK_HINT_MS)
+  and (FindPeekHintControl(fDownPos) <> nil) then
+  begin
+    // Press & Peek tooltip: cancel pending left-click so lifting finger won't activate the button
+    fLastMapTap := False;
+    if ActiveControls <> nil then
+      ActiveControls.CtrlDown := nil;
+    Exclude(fButtons, ssLeft);
+    gHostKeyDown[VK_LBUTTON] := False;
+    fTouchState := tsHintHold;
+    UpdateTouchPeek(fDownPos);
   end;
 end;
 
@@ -818,6 +901,7 @@ begin
     case aAction of
       TOUCH_DOWN:
         begin
+          ClearTouchPeek;
           if fLastMapTap
              and (GetTickCount64 - fLastMapTapTime <= DOUBLE_TAP_MS)
              and (Dist(P0, fLastMapTapPos) <= DOUBLE_TAP_SLOP)
@@ -880,8 +964,11 @@ begin
       TOUCH_POINTER_DOWN:
         if aPointerCount >= 2 then
           case fTouchState of
-            tsMapPending, tsMapPan, tsUIPending, tsSidebarPending, tsHousePreviewPending, tsHousePreviewDrag:
-              StartPinch(P0, P1);
+            tsMapPending, tsMapPan, tsUIPending, tsSidebarPending, tsHousePreviewPending, tsHousePreviewDrag, tsHintHold:
+              begin
+                ClearTouchPeek;
+                StartPinch(P0, P1);
+              end;
             tsMapDragLeft, tsUIDrag:
               begin
                 // Second finger cancels the left-button drag and starts a two-finger tap or pinch/pan
@@ -957,6 +1044,12 @@ begin
                 SendMove(P0);
                 fLastPos := P0;
               end;
+            end;
+          tsHintHold:
+            begin
+              SendMove(P0);
+              UpdateTouchPeek(P0);
+              fLastPos := P0;
             end;
           tsMapPending:
             if Dist(P0, fDownPos) > TAP_SLOP then
@@ -1062,6 +1155,7 @@ begin
               end;
             tsRightHold:
               begin
+                ClearTouchPeek;
                 if fRightHoldMoved then
                 begin
                   SendMove(P0);
@@ -1070,16 +1164,20 @@ begin
                 else
                   SendUp(mbRight, fDownPos);
               end;
+            tsHintHold:
+              ClearTouchPeek;
           end;
           fTouchState := tsIdle;
         end;
 
       TOUCH_CANCEL:
         begin
+          ClearTouchPeek;
           fLastMapTap := False;
           ReleaseButtons(fLastPos);
           fTouchState := tsIdle;
         end;
+
     end;
   except
     on E: Exception do
