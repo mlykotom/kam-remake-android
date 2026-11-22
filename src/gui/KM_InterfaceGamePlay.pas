@@ -25,6 +25,7 @@ const
   //Limit names length to fit interface width
   MAX_MAPNAME_LENGTH = 22;
   MAX_TRACKNAME_LENGTH = 18;
+  CTRL_GROUP_BAR_COUNT = 5;
 
 type
   //tbNone is the last, since we use Byte(Value) at some places
@@ -79,6 +80,7 @@ type
     procedure Create_TouchBuildConfirm;
     procedure Create_Replay;
     procedure Create_SpeedCtrl;
+    procedure Create_CtrlGroups;
     procedure Create_ScriptingOverlay;
     procedure Create_Message;
     procedure Create_MessageLog;
@@ -147,6 +149,12 @@ type
     procedure SpeedCtrl_Click(Sender: TObject);
     procedure PauseOverlay_Click(Sender: TObject);
     procedure UpdateSpeedCtrlUI;
+    function CanModifyCtrlGroups: Boolean;
+    function ResolveCtrlGroupSlot(aSlot: Word; out aTexID: Word; out aFlagColor: Cardinal; out aCountText: UnicodeString): TKMHandEntity;
+    procedure CtrlGroup_Click(Sender: TObject);
+    procedure CtrlGroup_LongPress(Sender: TObject);
+    procedure CtrlGroup_RightClickNoOp(Sender: TObject; const X, Y: Integer);
+    procedure UpdateCtrlGroupsUI;
     procedure TouchBuildConfirm_Click(Sender: TObject);
     function ScreenToMapCell(X, Y: Integer): TKMPoint;
     function GetHouseFootprintScreenRect(const aLoc: TKMPoint; aHouseType: TKMHouseType): TKMRect;
@@ -274,6 +282,9 @@ type
       Button_Speed2: TKMButton;
       Button_Speed3: TKMButton;
       Button_Speed4: TKMButton;
+    Panel_CtrlGroups: TKMPanel;
+      Button_CtrlGroup: array [0..CTRL_GROUP_BAR_COUNT - 1] of TKMButtonFlat;
+      Label_CtrlGroupSlot: array [0..CTRL_GROUP_BAR_COUNT - 1] of TKMLabel;
     Panel_BuildConfirm: TKMPanel;
       Button_BuildCancel: TKMButton;
       Image_BuildCancel: TKMImage;
@@ -1025,6 +1036,7 @@ begin
   Create_MessageLog; // Must go bellow message stack
   Create_MessageStack; // Messages, Allies, Chat icons
 
+  Create_CtrlGroups;
   Create_Pause;
   Create_Replay; // Replay controls
   Create_SpeedCtrl;
@@ -1156,6 +1168,7 @@ begin
   Label_ClockSpeedActual.Left := tbW + 41;
   Label_ClockSpeedRecorded.Left := tbW + 41;
   UpdateSpeedCtrlUI;
+  UpdateCtrlGroupsUI;
 
   Panel_ReplayBar.Left := Max(320, tbW + 96);
   Panel_ReplayFOW.Left := Max(320, tbW + 96);
@@ -1477,6 +1490,256 @@ begin
     Button_Speed2.OnClick     := SpeedCtrl_Click;
     Button_Speed3.OnClick     := SpeedCtrl_Click;
     Button_Speed4.OnClick     := SpeedCtrl_Click;
+end;
+
+
+const
+  CTRL_GROUP_BTN_W = 44;
+  CTRL_GROUP_BTN_H = 44;
+  CTRL_GROUP_BTN_GAP = 4;
+  CTRL_GROUP_BAR_W = CTRL_GROUP_BAR_COUNT * CTRL_GROUP_BTN_W + (CTRL_GROUP_BAR_COUNT - 1) * CTRL_GROUP_BTN_GAP;
+
+type
+  // Fires OnLongPress immediately on right-button MouseDown (250ms hold on touch) while finger is still down
+  TKMCtrlGroupButton = class(TKMButtonFlat)
+  public
+    OnLongPress: TNotifyEvent;
+    procedure MouseDown(X, Y: Integer; Shift: TShiftState; Button: TMouseButton); override;
+  end;
+
+
+procedure TKMCtrlGroupButton.MouseDown(X, Y: Integer; Shift: TShiftState; Button: TMouseButton);
+begin
+  if Button = mbRight then
+  begin
+    State := State - [csDown];
+    if Enabled and Assigned(OnLongPress) then
+    begin
+      gSoundPlayer.Play(sfxClick);
+      OnLongPress(Self);
+    end;
+    Exit;
+  end;
+  inherited;
+end;
+
+
+procedure TKMGamePlayInterface.Create_CtrlGroups;
+var
+  I, btnLeft: Integer;
+  btn: TKMCtrlGroupButton;
+begin
+  Panel_CtrlGroups := TKMPanel.Create(Panel_Main, 0, 0, CTRL_GROUP_BAR_W, CTRL_GROUP_BTN_H);
+  for I := 0 to CTRL_GROUP_BAR_COUNT - 1 do
+  begin
+    btnLeft := I * (CTRL_GROUP_BTN_W + CTRL_GROUP_BTN_GAP);
+    btn := TKMCtrlGroupButton.Create(Panel_CtrlGroups, btnLeft, 0, CTRL_GROUP_BTN_W, CTRL_GROUP_BTN_H, 0);
+    btn.Tag := I;
+    btn.Font := fntOutline;
+    btn.OnClick := CtrlGroup_Click;
+    btn.OnClickRight := CtrlGroup_RightClickNoOp; // Marks control as right-clickable for 250ms touch long-press
+    btn.OnLongPress := CtrlGroup_LongPress;
+    Button_CtrlGroup[I] := btn;
+
+    Label_CtrlGroupSlot[I] := TKMLabel.Create(Panel_CtrlGroups, btnLeft + 3, 2, 16, 14, IntToStr(I + 1), fntOutline, taLeft);
+    Label_CtrlGroupSlot[I].Hitable := False;
+  end;
+  Panel_CtrlGroups.Hide;
+end;
+
+
+function TKMGamePlayInterface.CanModifyCtrlGroups: Boolean;
+begin
+  Result := (fUIMode in [umSP, umMP])
+            and not HasLostMPGame
+            and (gGame <> nil)
+            and not gGame.IsPlayerWaiting
+            and (gMySpectator <> nil)
+            and (gMySpectator.Hand <> nil)
+            and not gMySpectator.Hand.InCinematic;
+end;
+
+
+function TKMGamePlayInterface.ResolveCtrlGroupSlot(aSlot: Word; out aTexID: Word; out aFlagColor: Cardinal;
+  out aCountText: UnicodeString): TKMHandEntity;
+var
+  uid: Integer;
+  U: TKMUnit;
+  H: TKMHouse;
+  G: TKMUnitGroup;
+begin
+  Result := nil;
+  aTexID := 0;
+  aFlagColor := $FFFFFFFF;
+  aCountText := '';
+  if not InRange(aSlot, Low(fSelection), High(fSelection)) then Exit;
+
+  uid := fSelection[aSlot];
+  if uid = -1 then Exit;
+
+  U := gHands.GetUnitByUID(uid);
+  if (U <> nil) and not U.IsDeadOrDying then
+  begin
+    aTexID := gRes.Units[U.UnitType].GUIIcon;
+    aFlagColor := gHands[U.Owner].FlagColor;
+    Exit(U);
+  end;
+
+  H := gHands.GetHouseByUID(uid);
+  if (H <> nil) and not H.IsDestroyed then
+  begin
+    aTexID := gRes.Houses[H.HouseType].GUIIcon;
+    aFlagColor := gHands[H.Owner].FlagColor;
+    Exit(H);
+  end;
+
+  G := gHands.GetGroupByUID(uid);
+  if (G <> nil) and not G.IsDead then
+  begin
+    aTexID := gRes.Units[G.UnitType].GUIIcon;
+    aFlagColor := gHands[G.Owner].FlagColor;
+    aCountText := IntToStr(G.Count);
+    Exit(G);
+  end;
+end;
+
+
+procedure TKMGamePlayInterface.CtrlGroup_RightClickNoOp(Sender: TObject; const X, Y: Integer);
+begin
+  // Handled immediately on MouseDown(mbRight) by TKMCtrlGroupButton
+end;
+
+
+procedure TKMGamePlayInterface.CtrlGroup_Click(Sender: TObject);
+var
+  slot: Word;
+  texID: Word;
+  flagCol: Cardinal;
+  cntTxt: UnicodeString;
+  boundEntity: TKMHandEntity;
+begin
+  if not (Sender is TKMControl) then Exit;
+  slot := TKMControl(Sender).Tag;
+  boundEntity := ResolveCtrlGroupSlot(slot, texID, flagCol, cntTxt);
+
+  if boundEntity = nil then
+  begin
+    if CanModifyCtrlGroups and (gMySpectator.Selected <> nil) then
+      Selection_Assign(slot, gMySpectator.Selected);
+  end
+  else if CanModifyCtrlGroups
+          and fGuiGameUnit.JoiningGroups
+          and (gMySpectator.Selected is TKMUnitGroup)
+          and (boundEntity is TKMUnitGroup)
+          and (boundEntity <> gMySpectator.Selected)
+          and (TKMUnitGroup(boundEntity).GroupType = TKMUnitGroup(gMySpectator.Selected).GroupType) then
+  begin
+    Selection_Link(slot, gMySpectator.Selected);
+    fGuiGameUnit.Army_HideJoinMenu(nil);
+  end
+  else
+    Selection_Select(slot);
+
+  UpdateCtrlGroupsUI;
+end;
+
+
+procedure TKMGamePlayInterface.CtrlGroup_LongPress(Sender: TObject);
+var
+  slot: Word;
+begin
+  if not (Sender is TKMControl) or not CanModifyCtrlGroups then Exit;
+  slot := TKMControl(Sender).Tag;
+  Selection_Assign(slot, gMySpectator.Selected); // Assigns current selection, or clears slot when Selected = nil
+  UpdateCtrlGroupsUI;
+end;
+
+
+procedure TKMGamePlayInterface.UpdateCtrlGroupsUI;
+var
+  I, tbW, availLeft, availRight: Integer;
+  hasAnyAssigned, canBindSelected, shouldShow, isSlotSelected: Boolean;
+  entities: array [0..CTRL_GROUP_BAR_COUNT - 1] of TKMHandEntity;
+  texIDs: array [0..CTRL_GROUP_BAR_COUNT - 1] of Word;
+  flagCols: array [0..CTRL_GROUP_BAR_COUNT - 1] of Cardinal;
+  cntTexts: array [0..CTRL_GROUP_BAR_COUNT - 1] of UnicodeString;
+begin
+  if (Self = nil) or (Panel_CtrlGroups = nil) then Exit;
+
+  hasAnyAssigned := False;
+  for I := 0 to CTRL_GROUP_BAR_COUNT - 1 do
+  begin
+    entities[I] := ResolveCtrlGroupSlot(I, texIDs[I], flagCols[I], cntTexts[I]);
+    if entities[I] <> nil then
+      hasAnyAssigned := True;
+  end;
+
+  canBindSelected := CanModifyCtrlGroups and (gMySpectator <> nil) and (gMySpectator.Selected <> nil);
+
+  shouldShow := PlatformIsTouchMode
+                and (fUIMode in [umSP, umMP])
+                and not HasLostMPGame
+                and (gMySpectator <> nil)
+                and (gMySpectator.Hand <> nil)
+                and not gMySpectator.Hand.InCinematic
+                and not ((gGame <> nil) and gGame.IsPaused and not DBG_LIVE_GAME_ON_PAUSE)
+                and not IsFullScreenPageVisible
+                and not IsTouchHousePlacement
+                and not Panel_Message.Visible
+                and not Panel_MessageLog.Visible
+                and not fGuiGameChat.Visible
+                and not fGuiGameAllies.Visible
+                and not Panel_PlayMore.Visible
+                and not Panel_MPPlayMore.Visible
+                and not Panel_NetWait.Visible
+                and (hasAnyAssigned or canBindSelected);
+
+  Panel_CtrlGroups.Visible := shouldShow;
+  if not shouldShow then Exit;
+
+  tbW := Round(TOOLBAR_WIDTH * Panel_Sidebar.RenderScale);
+  availLeft := tbW + 36;
+  availRight := Panel_Main.Width - GetSafeInsetRight - 8;
+  Panel_CtrlGroups.Left := Max(availLeft, (availLeft + availRight - CTRL_GROUP_BAR_W) div 2);
+  Panel_CtrlGroups.Top := Panel_Main.Height - CTRL_GROUP_BTN_H - 8;
+
+  for I := 0 to CTRL_GROUP_BAR_COUNT - 1 do
+  begin
+    if entities[I] <> nil then
+    begin
+      isSlotSelected := (gMySpectator.Selected = entities[I]);
+      Button_CtrlGroup[I].TexID := texIDs[I];
+      Button_CtrlGroup[I].FlagColor := flagCols[I];
+      Button_CtrlGroup[I].Caption := cntTexts[I];
+      Button_CtrlGroup[I].CapOffsetY := 6;
+      Button_CtrlGroup[I].CapColor := icWhite;
+      Button_CtrlGroup[I].BackAlpha := IfThen(isSlotSelected, 0.75, 0.55);
+      Button_CtrlGroup[I].Down := isSlotSelected;
+
+      Label_CtrlGroupSlot[I].FontColor := IfThen(isSlotSelected, icRoyalYellow, icWhite);
+      Label_CtrlGroupSlot[I].Show;
+    end
+    else
+    begin
+      Button_CtrlGroup[I].TexID := 0;
+      Button_CtrlGroup[I].Down := False;
+      Button_CtrlGroup[I].CapOffsetY := -11;
+
+      if canBindSelected then
+      begin
+        Button_CtrlGroup[I].Caption := '+' + IntToStr(I + 1);
+        Button_CtrlGroup[I].CapColor := icRoyalYellow;
+        Button_CtrlGroup[I].BackAlpha := 0.55;
+      end
+      else
+      begin
+        Button_CtrlGroup[I].Caption := IntToStr(I + 1);
+        Button_CtrlGroup[I].CapColor := icGray;
+        Button_CtrlGroup[I].BackAlpha := 0.35;
+      end;
+      Label_CtrlGroupSlot[I].Hide;
+    end;
+  end;
 end;
 
 
@@ -5302,7 +5565,9 @@ begin
                             and not ((gGame.IsPaused or gGame.IsWaitingForNetwork) and IsKeyFuncBlockedOnPause(kfScrollUp)),
                             gMySpectator.Hand.InCinematic);
   UpdateTouchBuildUI;
+  UpdateCtrlGroupsUI;
 end;
+
 
 
 function TKMGamePlayInterface.IsDragScrollingAllowed: Boolean;
