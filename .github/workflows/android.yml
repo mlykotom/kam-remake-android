@@ -115,16 +115,17 @@ jobs:
           set -euo pipefail
           REV="$(grep -oE '[0-9]+' KM_Revision.inc | head -1 || echo 'unknown')"
           RELEASE_TAG=""
+          INPUT_TAG="$(printf '%s' "${INPUT_RELEASE_TAG}" | tr -d '\r`' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             RELEASE_TAG="${GITHUB_REF_NAME}"
             VER_NAME="${RELEASE_TAG#v}"
             APK_LABEL="${RELEASE_TAG}"
-          elif [ -n "${INPUT_RELEASE_TAG}" ]; then
-            if [[ ! "${INPUT_RELEASE_TAG}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
-              echo "ERROR: Invalid release_tag format '${INPUT_RELEASE_TAG}' (must match ^v[0-9A-Za-z._-]+$)" >&2
+          elif [ -n "${INPUT_TAG}" ]; then
+            if [[ ! "${INPUT_TAG}" =~ ^[0-9A-Za-z._-]+$ ]]; then
+              echo "ERROR: Invalid release_tag format '${INPUT_TAG}' (allowed characters: letters, digits, '.', '_', '-')" >&2
               exit 1
             fi
-            RELEASE_TAG="${INPUT_RELEASE_TAG}"
+            RELEASE_TAG="${INPUT_TAG}"
             VER_NAME="${RELEASE_TAG#v}"
             APK_LABEL="${RELEASE_TAG}"
           else
