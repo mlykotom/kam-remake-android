@@ -43,6 +43,7 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ### 5. Smart Soft Keyboard, Save Quality-of-Life & Zero-PC Built-In Setup
 - **Viewport Keyboard Shift:** The Android soft keyboard opens only when you tap an editable text box and shifts the screen upward so zoomed sidebar text fields stay visible above the keyboard.
+- **Background Auto-Save & One-Tap "Continue":** Switching apps or locking the screen automatically pauses and saves active single-player missions (`autosave_suspend`) before `onPause` returns, and adds a **Continue** button (with mission name and elapsed time) to the top of the Main Menu whenever an unfinished single-player save is available.
 - **Auto-Indexed Saves:** Save filenames auto-increment (`Save 1`, `Save 2`, …), sort naturally, and support loading saves from older *KaM Remake* revisions.
 - **Zero-PC On-Device Game Setup (`libinnoextract` Inside):** Verify your purchased GOG offline installer (`.exe`) or Steam/GOG game folder right on your phone, then download and unpack the official *KaM Remake* asset package natively on-device with one tap — or import an existing `.zip` / folder in one step.
 

@@ -56,7 +56,9 @@ type
     function IsValidStrictly: Boolean;
     function IsMultiplayer: Boolean;
     function IsReplayValid: Boolean;
+    function IsInProgressSinglePlayer: Boolean;
     function LoadMinimap(aMinimap: TKMMinimap): Boolean; overload;
+
     function LoadMinimap(aMinimap: TKMMinimap; aChoosenStartLoc: Integer): Boolean; overload;
   end;
 
@@ -104,8 +106,10 @@ type
     class function FullPath(const aName, aExt: UnicodeString; aIsMultiplayer: Boolean): UnicodeString;
     class function GetSaveCRC(const aName: UnicodeString; aIsMultiplayer: Boolean): Cardinal;
     class function GetSaveFolder(aIsMultiplayer: Boolean): UnicodeString;
+    class function FindLatestContinueSave(out aSaveName, aTitle, aTimeText: UnicodeString): Boolean;
 
     procedure Refresh(aOnRefresh: TNotifyEvent; aMultiplayerPath: Boolean; aOnTerminate: TNotifyEvent = nil; aOnComplete: TNotifyEvent = nil);
+
     procedure TerminateScan;
     procedure Sort(aSortMethod: TKMSavesSortMethod; aOnSortComplete: TNotifyEvent);
     property SortMethod: TKMSavesSortMethod read fSortMethod; //Read-only because we should not change it while Refreshing
@@ -124,10 +128,11 @@ type
 implementation
 uses
   SysUtils, Math, KromUtils,
-  KM_GameClasses,
+  KM_CampaignClasses, KM_GameClasses, KM_GameSettings,
   KM_Resource, KM_ResTexts, KM_FileIO,
   KM_CommonClasses, KM_Defaults, KM_CommonUtils, KM_Log,
   KM_GameTypes, KM_Utils;
+
 
 
 { TKMSaveInfo }
@@ -348,7 +353,76 @@ begin
 end;
 
 
+// Check whether this save is a strictly compatible, unfinished single-player game suitable for Main Menu Continue
+function TKMSaveInfo.IsInProgressSinglePlayer: Boolean;
+var
+  loadStream, headerStream, bodyStream: TKMemoryStream;
+  dummyGameInfo: TKMGameInfo;
+  dummyGameOptions: TKMGameOptions;
+  campId: TKMCampaignId;
+  campMission: Byte;
+  compressedSaveBody, saveIsMultiplayer, isCampaign, dynamicFOW, speedChangeAllowed: Boolean;
+  speedGIP: Single;
+  missionFileSP: UnicodeString;
+  uidTrackerVal: Integer;
+  loadedSeed: LongInt;
+  gameRes: TKMGameResultMsg;
+begin
+  Result := False;
+  if not IsValidStrictly or IsMultiplayer then Exit;
+
+  dummyGameInfo := TKMGameInfo.Create;
+  dummyGameOptions := TKMGameOptions.Create;
+  loadStream := TKMemoryStreamBinary.Create;
+  headerStream := TKMemoryStreamBinary.Create;
+  bodyStream := TKMemoryStreamBinary.Create(True);
+  try
+    try
+      loadStream.LoadFromFile(fPath + fFileName + EXT_SAVE_MAIN_DOT);
+      loadStream.Read(compressedSaveBody);
+      if not compressedSaveBody then Exit;
+
+      loadStream.LoadToStreams(headerStream, bodyStream, SAVE_HEADER_MARKER, SAVE_BODY_MARKER);
+
+      dummyGameInfo.Load(headerStream);
+      dummyGameOptions.Load(headerStream);
+      headerStream.Read(saveIsMultiplayer);
+      if saveIsMultiplayer then Exit;
+
+      bodyStream.Read(isCampaign);
+      if isCampaign then
+      begin
+        campId := TKMCampaignId.Load(bodyStream);
+        campId.Free;
+        bodyStream.Read(campMission);
+      end;
+
+      bodyStream.Read(dynamicFOW);
+      bodyStream.Read(speedGIP);
+      bodyStream.Read(speedChangeAllowed);
+      bodyStream.ReadW(missionFileSP);
+
+      bodyStream.CheckMarker('UIDTracker');
+      bodyStream.Read(uidTrackerVal);
+      bodyStream.Read(loadedSeed);
+      bodyStream.Read(gameRes, SizeOf(gameRes));
+
+      Result := gameRes in [grCancel, grGameContinues];
+    except
+      Result := False;
+    end;
+  finally
+    bodyStream.Free;
+    headerStream.Free;
+    loadStream.Free;
+    dummyGameOptions.Free;
+    dummyGameInfo.Free;
+  end;
+end;
+
+
 { TKMSavesCollection }
+
 constructor TKMSavesCollection.Create(aSortMethod: TKMSavesSortMethod = smByFileNameDesc);
 begin
   inherited Create;
@@ -427,6 +501,94 @@ begin
   else
     Result := SAVES_FOLDER_NAME;
 end;
+
+
+class function TKMSavesCollection.FindLatestContinueSave(out aSaveName, aTitle, aTimeText: UnicodeString): Boolean;
+var
+  pathToSaves, nameLower, preferredLower: string;
+  searchRec: TSearchRec;
+  candidates: array of TKMSaveInfo;
+  save, tmp: TKMSaveInfo;
+  I, J, count: Integer;
+  swapNeeded: Boolean;
+begin
+  Result := False;
+  aSaveName := '';
+  aTitle := '';
+  aTimeText := '';
+
+  pathToSaves := ExeDir + GetSaveFolder(False) + PathDelim;
+  if not DirectoryExists(pathToSaves) then Exit;
+
+  preferredLower := '';
+  if gGameSettings <> nil then
+    preferredLower := LowerCase(string(gGameSettings.MenuSPSaveFileName));
+
+  count := 0;
+  SetLength(candidates, 0);
+  try
+    if FindFirst(pathToSaves + '*', faDirectory, searchRec) = 0 then
+    try
+      repeat
+        nameLower := LowerCase(searchRec.Name);
+        if (searchRec.Name <> '.') and (searchRec.Name <> '..')
+          and (nameLower <> BASESAVE_NAME)
+          and (nameLower <> AUTOSAVE_SAVE_NAME)
+          and (nameLower <> CRASHREPORT_SAVE_NAME)
+          and FileExists(FullPath(UnicodeString(searchRec.Name), EXT_SAVE_MAIN, False))
+          and FileExists(FullPath(UnicodeString(searchRec.Name), EXT_SAVE_REPLAY, False))
+          and FileExists(FullPath(UnicodeString(searchRec.Name), EXT_SAVE_BASE, False)) then
+        begin
+          try
+            save := TKMSaveInfo.Create(searchRec.Name, False);
+            if save.IsValidStrictly then
+            begin
+              SetLength(candidates, count + 1);
+              candidates[count] := save;
+              Inc(count);
+            end
+            else
+              save.Free;
+          except
+            // Ignore unreadable save folders
+          end;
+        end;
+      until FindNext(searchRec) <> 0;
+    finally
+      FindClose(searchRec);
+    end;
+
+    for I := 0 to count - 2 do
+      for J := I + 1 to count - 1 do
+      begin
+        swapNeeded := candidates[J].GameInfo.SaveTimestamp > candidates[I].GameInfo.SaveTimestamp;
+        if not swapNeeded
+          and (Abs(candidates[J].GameInfo.SaveTimestamp - candidates[I].GameInfo.SaveTimestamp) < (1.0 / 86400000.0))
+          and (preferredLower <> '')
+          and (LowerCase(candidates[J].FileName) = preferredLower) then
+          swapNeeded := True;
+        if swapNeeded then
+        begin
+          tmp := candidates[I];
+          candidates[I] := candidates[J];
+          candidates[J] := tmp;
+        end;
+      end;
+
+    for I := 0 to count - 1 do
+      if candidates[I].IsInProgressSinglePlayer then
+      begin
+        aSaveName := UnicodeString(candidates[I].FileName);
+        aTitle := candidates[I].GameInfo.Title;
+        aTimeText := TickToTimeStr(candidates[I].GameInfo.TickCount);
+        Exit(True);
+      end;
+  finally
+    for I := 0 to count - 1 do
+      candidates[I].Free;
+  end;
+end;
+
 
 
 function TKMSavesCollection.Contains(const aNewName: UnicodeString): Boolean;

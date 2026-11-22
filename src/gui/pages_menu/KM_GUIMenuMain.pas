@@ -3,6 +3,7 @@ unit KM_GUIMenuMain;
 interface
 uses
   Math, SysUtils,
+  KM_CommonTypes,
   KM_Controls, KM_ControlsBase, KM_ControlsEdit,
   KM_Pics, KM_InterfaceDefaults, KM_InterfaceTypes;
 
@@ -11,10 +12,14 @@ type
   TKMMenuMain = class(TKMMenuPageCommon)
   private
     fOnPageChange: TKMMenuChangeEventText;
+    fContinueSaveName: UnicodeString;
     procedure ButtonClick(Sender: TObject);
+    procedure RefreshContinueState;
   protected
     Panel_MainMenu: TKMPanel;
     Panel_MMButtons: TKMPanel;
+    Button_MM_Continue: TKMButton;
+    Label_MM_ContinueInfo: TKMLabel;
     Button_MM_SinglePlayer: TKMButton;
     Button_MM_MultiPlayer: TKMButton;
     Button_MM_MapEd: TKMButton;
@@ -23,6 +28,7 @@ type
     Button_MM_Credits: TKMButton;
     Button_MM_Quit: TKMButton;
   public
+    OnNewSingleSave: TUnicodeStringEvent;
     constructor Create(aParent: TKMPanel; aOnPageChange: TKMMenuChangeEventText);
     procedure Show;
   end;
@@ -32,8 +38,10 @@ implementation
 uses
   KM_Main,
   KM_GameApp,
+  KM_Saves,
   KM_ResTexts, KM_ResFonts, KM_ResTypes,
   KM_RenderUI;
+
 
 
 { TKMMenuMain }
@@ -55,6 +63,12 @@ begin
       ImageStretch;
 
     Panel_MMButtons := TKMPanel.Create(Panel_MainMenu, 337, 340, 350, 400);
+      Button_MM_Continue     := TKMButton.Create(Panel_MMButtons,0,  0,350,30,gResTexts[TX_MENU_MISSION_NEXT],bsMenu);
+      Label_MM_ContinueInfo  := TKMLabel.Create(Panel_MMButtons,0, 33,350,18,'',fntAntiqua,taCenter);
+      Label_MM_ContinueInfo.Hitable := False;
+      Button_MM_Continue.Hide;
+      Label_MM_ContinueInfo.Hide;
+
       Button_MM_SinglePlayer := TKMButton.Create(Panel_MMButtons,0,  0,350,30,gResTexts[TX_MENU_SINGLEPLAYER],bsMenu);
       Button_MM_MultiPlayer  := TKMButton.Create(Panel_MMButtons,0, 40,350,30,gResTexts[TX_MENU_MULTIPLAYER],bsMenu);
       Button_MM_MapEd        := TKMButton.Create(Panel_MMButtons,0, 80,350,30,gResTexts[TX_MENU_MAP_EDITOR],bsMenu);
@@ -63,14 +77,10 @@ begin
       Button_MM_Credits      := TKMButton.Create(Panel_MMButtons,0,200,350,30,gResTexts[TX_MENU_CREDITS],bsMenu);
       Button_MM_Quit         := TKMButton.Create(Panel_MMButtons,0,290,350,30,gResTexts[TX_MENU_QUIT],bsMenu);
       {$IFDEF NO_MULTIPLAYER_UI}
-      // Build without multiplayer: hide the button and close the gap
       Button_MM_MultiPlayer.Hide;
-      Button_MM_MapEd.Top   := Button_MM_MapEd.Top - 40;
-      Button_MM_Replays.Top := Button_MM_Replays.Top - 40;
-      Button_MM_Options.Top := Button_MM_Options.Top - 40;
-      Button_MM_Credits.Top := Button_MM_Credits.Top - 40;
       {$ENDIF}
 
+      Button_MM_Continue.OnClick     := ButtonClick;
       Button_MM_SinglePlayer.OnClick := ButtonClick;
       Button_MM_MultiPlayer.OnClick  := ButtonClick;
       Button_MM_MapEd.OnClick        := ButtonClick;
@@ -78,13 +88,74 @@ begin
       Button_MM_Options.OnClick      := ButtonClick;
       Button_MM_Credits.OnClick      := ButtonClick;
       Button_MM_Quit.OnClick         := ButtonClick;
+
+      RefreshContinueState;
+end;
+
+
+procedure TKMMenuMain.RefreshContinueState;
+var
+  saveTitle, saveTime, infoStr: UnicodeString;
+  hasContinue: Boolean;
+begin
+  hasContinue := TKMSavesCollection.FindLatestContinueSave(fContinueSaveName, saveTitle, saveTime);
+  if hasContinue then
+  begin
+    infoStr := Format('%s (%s)', [saveTitle, saveTime]);
+    Button_MM_Continue.Hint := infoStr;
+    Label_MM_ContinueInfo.Caption := infoStr;
+    Button_MM_Continue.Show;
+    Label_MM_ContinueInfo.Show;
+
+    Button_MM_Continue.Top := 0;
+    Label_MM_ContinueInfo.Top := 33;
+    {$IFDEF NO_MULTIPLAYER_UI}
+    Button_MM_SinglePlayer.Top := 58;
+    Button_MM_MapEd.Top        := 98;
+    Button_MM_Replays.Top      := 138;
+    Button_MM_Options.Top      := 178;
+    Button_MM_Credits.Top      := 218;
+    {$ELSE}
+    Button_MM_SinglePlayer.Top := 54;
+    Button_MM_MultiPlayer.Top  := 90;
+    Button_MM_MapEd.Top        := 126;
+    Button_MM_Replays.Top      := 162;
+    Button_MM_Options.Top      := 198;
+    Button_MM_Credits.Top      := 234;
+    {$ENDIF}
+  end
+  else
+  begin
+    fContinueSaveName := '';
+    Button_MM_Continue.Hide;
+    Label_MM_ContinueInfo.Hide;
+
+    Button_MM_SinglePlayer.Top := 0;
+    {$IFDEF NO_MULTIPLAYER_UI}
+    Button_MM_MapEd.Top        := 40;
+    Button_MM_Replays.Top      := 80;
+    Button_MM_Options.Top      := 120;
+    Button_MM_Credits.Top      := 160;
+    {$ELSE}
+    Button_MM_MultiPlayer.Top  := 40;
+    Button_MM_MapEd.Top        := 80;
+    Button_MM_Replays.Top      := 120;
+    Button_MM_Options.Top      := 160;
+    Button_MM_Credits.Top      := 200;
+    {$ENDIF}
+  end;
+  Button_MM_Quit.Top := 290;
 end;
 
 
 procedure TKMMenuMain.ButtonClick(Sender: TObject);
 begin
+  if (Sender = Button_MM_Continue) and (fContinueSaveName <> '') and Assigned(OnNewSingleSave) then
+    OnNewSingleSave(fContinueSaveName);
+
   if Sender = Button_MM_SinglePlayer then
     fOnPageChange(gpSinglePlayer);
+
 
   if Sender = Button_MM_MultiPlayer then
   begin
@@ -121,8 +192,10 @@ end;
 
 procedure TKMMenuMain.Show;
 begin
+  RefreshContinueState;
   Panel_MainMenu.Show;
 end;
+
 
 
 end.

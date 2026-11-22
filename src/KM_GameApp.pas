@@ -175,7 +175,8 @@ uses
   KM_GameSavePoints,
   KM_Cursor, KM_ResTexts, KM_ResKeys, KM_ResTypes,
   KM_IoGraphicUtils, KM_Settings,
-  KM_Saves, KM_CommonUtils, KM_CommonShellUtils,
+  KM_Saves, KM_FileIO, KM_CommonUtils, KM_CommonShellUtils,
+
   {$IFDEF DBG_RNG_SPY}KM_RandomChecks,{$ENDIF}
   KM_DevPerfLog, KM_DevPerfLogTypes;
 
@@ -626,8 +627,11 @@ begin
 
   if (gGame.GameResult in [grWin, grDefeat]) and not gGame.Params.IsReplay then
   begin
+    if not gGame.Params.IsMultiPlayerOrSpec then
+      KMDeleteFolder(TKMGame.SavePath(AUTOSAVE_SUSPEND_SAVE_NAME, False));
     GameFinished;
     if gGameSettings.AutosaveAtGameEnd then
+
       // We have to use local time for local save name (Now) and UTC time inside the save (UTCNow, it will be converted back to local on read)
       gGame.Save(Format('%s %s #%d', [gGame.Params.Name, FormatDateTime('yyyy-mm-dd', Now), gGameSettings.DayGamesCount]), UTCNow);
   end;

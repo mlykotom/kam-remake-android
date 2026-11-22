@@ -54,6 +54,42 @@ internal abstract class KaMSurfaceView(context: Context) : SurfaceView(context),
         }
     }
 
+    /**
+     * Pauses frame rendering and runs [pauseAction] on the render thread, waiting up to [timeoutMs]
+     * so background auto-save and settings persistence complete before Activity.onPause() returns.
+     */
+    fun pauseAndWait(pauseAction: Runnable?, timeoutMs: Long = 2500L) {
+        var done = pauseAction == null
+        synchronized(lock) {
+            paused = true
+            if (pauseAction != null && !exiting) {
+                events.add(Runnable {
+                    try {
+                        pauseAction.run()
+                    } finally {
+                        synchronized(lock) {
+                            done = true
+                            lock.notifyAll()
+                        }
+                    }
+                })
+            } else {
+                done = true
+            }
+            lock.notifyAll()
+            val deadline = android.os.SystemClock.uptimeMillis() + timeoutMs
+            while (!done && !exiting) {
+                val remaining = deadline - android.os.SystemClock.uptimeMillis()
+                if (remaining <= 0L) break
+                try {
+                    lock.wait(remaining)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }
+    }
+
     fun onResume() {
         synchronized(lock) {
             paused = false
