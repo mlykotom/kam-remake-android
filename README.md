@@ -23,6 +23,7 @@ While preserving 100% of the authentic *KaM Remake* simulation, campaigns, singl
 
 ### 2. RTS Touch Gestures, 2.5× Troop Direction Selector & Haptic Feedback
 - **Zero-Latency Tap & Multi-Gesture Right-Click:** Single tap fires left-click immediately; **double-tap**, **long-press (250 ms)**, or **two-finger tap** triggers right-click; pinch zooms smoothly around your fingers.
+- **Touch Target Magnet:** Zoom-invariant hit radius (`28 px`) snaps near-miss taps onto moving friendly squads/citizens, squad-link targets, and enemy squads on stationary attack orders — without interfering with house selection or hold-and-drag directional walking.
 - **2.5× Enlarged Troop Direction Flower:** Double-tap-and-hold (or long-press-and-drag) on the battlefield to orient troop formations with a **2.5× scaled direction flower** that stays clearly visible around your fingertip.
 - **Tactile Haptics:** Subtle haptic ticks confirm UI clicks, build actions, and right-click commands.
 
