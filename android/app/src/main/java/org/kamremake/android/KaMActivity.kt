@@ -2,6 +2,7 @@ package org.kamremake.android
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.backup.BackupManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -545,6 +546,12 @@ class KaMActivity : Activity() {
     override fun onPause() {
         super.onPause()
         view?.pauseAndWait(if (engineRunning) Runnable(KaMNative::pause) else null)
+        if (engineRunning) {
+            try {
+                BackupManager.dataChanged(packageName)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     override fun onResume() {
@@ -713,6 +720,10 @@ class KaMActivity : Activity() {
                 .putFloat(PREF_UI_SCALE, clamped)
                 .apply()
             view?.setUiScale(clamped)
+            try {
+                BackupManager.dataChanged(packageName)
+            } catch (_: Exception) {
+            }
         }
     }
 

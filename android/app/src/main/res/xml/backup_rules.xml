@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="external" path="KaM Remake Settings.xml" />
+    <include domain="external" path="KaM Remake Server Settings.ini" />
+    <include domain="external" path="SavesCMP" />
+    <include domain="external" path="Saves" />
+    <include domain="external" path="SavesMP" />
+</full-backup-content>

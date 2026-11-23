@@ -379,4 +379,139 @@ class KaMAndroidTest {
         assertStaticMethod("onHaptic", Void.TYPE, expectNative = false)
         assertStaticMethod("onSetUiScale", Void.TYPE, Float::class.javaPrimitiveType!!, expectNative = false)
     }
+
+    @Test
+    fun backupAgentPacksEssentialsAndNewestSaveBundlesUnderQuotaWithoutDeletingLocalFiles() {
+        val root = Files.createTempDirectory("kam_test_backup").toFile()
+        try {
+            val sharedPrefs = File(root, "shared_prefs").apply { mkdirs() }
+            val ext = File(root, "external").apply { mkdirs() }
+
+            val prefFile = File(sharedPrefs, "kam.xml").apply { writeText("<map><float name=\"ui_scale\" value=\"1.25\" /></map>") }
+            val settingsXml = File(ext, KaMBackupAgent.SETTINGS_XML).apply { writeText("<Settings/>") }
+            val serverIni = File(ext, KaMBackupAgent.SERVER_SETTINGS_INI).apply { writeText("[Server]\n") }
+            val cmpDir = File(ext, KaMBackupAgent.SAVES_CMP_DIR).apply { mkdirs() }
+            val tskXml = File(cmpDir, "TSK.xml").apply { writeText("<Campaign Unlocked=\"7\"/>") }
+
+            // Game assets & logs must never be selected for backup
+            File(ext, "data/sprites").apply { mkdirs() }
+            val spriteAsset = File(ext, "data/sprites/gui.rxa").apply { writeBytes(ByteArray(32_768)) }
+            File(ext, "Logs").apply { mkdirs() }
+            val logFile = File(ext, "Logs/KaM.log").apply { writeText("engine log") }
+
+            fun writeSave(
+                parentName: String,
+                saveName: String,
+                payloadBytes: Int,
+                mtimeMs: Long,
+                withSptBytes: Int = 0,
+                withSloc: Boolean = false
+            ): File {
+                val dir = File(File(ext, parentName), saveName).apply { mkdirs() }
+                val chunk = payloadBytes / 3
+                val sav = File(dir, "$saveName.sav").apply {
+                    writeBytes(ByteArray(chunk) { 1 })
+                    setLastModified(mtimeMs)
+                }
+                val bas = File(dir, "$saveName.bas").apply {
+                    writeBytes(ByteArray(chunk) { 2 })
+                    setLastModified(mtimeMs)
+                }
+                val rpl = File(dir, "$saveName.rpl").apply {
+                    writeBytes(ByteArray(payloadBytes - 2 * chunk) { 3 })
+                    setLastModified(mtimeMs)
+                }
+                if (withSloc) {
+                    File(dir, "$saveName.sloc").apply {
+                        writeBytes(ByteArray(64) { 4 })
+                        setLastModified(mtimeMs)
+                    }
+                }
+                if (withSptBytes > 0) {
+                    // Bulky .spt seek cache + .rng debug log must be excluded even on backed-up saves
+                    File(dir, "$saveName.spt").apply {
+                        writeBytes(ByteArray(withSptBytes) { 9 })
+                        setLastModified(mtimeMs)
+                    }
+                    File(dir, "$saveName.rng").apply {
+                        writeText("rng trace")
+                        setLastModified(mtimeMs)
+                    }
+                }
+                assertTrue(sav.isFile && bas.isFile && rpl.isFile)
+                return dir
+            }
+
+            // Transient / incomplete folders must be ignored even if newest
+            writeSave(KaMBackupAgent.SAVES_SP_DIR, "basesave", payloadBytes = 9_000, mtimeMs = 900_000L)
+            writeSave(KaMBackupAgent.SAVES_SP_DIR, "basesave_thread_1", payloadBytes = 9_000, mtimeMs = 900_000L)
+            writeSave(KaMBackupAgent.SAVES_SP_DIR, "crashreport", payloadBytes = 9_000, mtimeMs = 900_000L)
+            File(ext, "Saves/Incomplete").apply {
+                mkdirs()
+                File(this, "Incomplete.sav").writeBytes(ByteArray(4_000))
+            }
+
+            // Four real saves (~30 KB raw + 3 KB tar overhead = ~33 KB each) with distinct timestamps
+            val oldSaveDir = writeSave(KaMBackupAgent.SAVES_SP_DIR, "Save 1", payloadBytes = 30_000, mtimeMs = 100_000L)
+            val midSaveDir = writeSave(KaMBackupAgent.SAVES_SP_DIR, "Save 2", payloadBytes = 30_000, mtimeMs = 200_000L)
+            val mpSaveDir = writeSave(KaMBackupAgent.SAVES_MP_DIR, "Coop 1", payloadBytes = 30_000, mtimeMs = 300_000L, withSloc = true)
+            val newestSuspendDir = writeSave(
+                KaMBackupAgent.SAVES_SP_DIR,
+                "autosave_suspend",
+                payloadBytes = 30_000,
+                mtimeMs = 400_000L,
+                withSptBytes = 500_000 // 500 KB .spt would blow the 90 KB quota if not excluded!
+            )
+
+            // Tight 90 KB quota -> 81 KB budget: fits essentials (~4 KB) + newest 2 saves (~67 KB), evicting Save 2 & Save 1
+            val plan = KaMBackupAgent.selectBackupPlan(
+                sharedPrefsDir = sharedPrefs,
+                externalFilesDir = ext,
+                quotaBytes = 90_000L,
+                isDeviceTransfer = false
+            )
+
+            assertEquals(4, plan.totalSaveBundles)
+            assertEquals(2, plan.includedSaveBundles)
+            assertTrue(plan.estimatedBytes <= plan.budgetBytes)
+
+            val paths = plan.files.map { it.canonicalPath }.toSet()
+            // Essentials are always included
+            assertTrue(prefFile.canonicalPath in paths)
+            assertTrue(settingsXml.canonicalPath in paths)
+            assertTrue(serverIni.canonicalPath in paths)
+            assertTrue(tskXml.canonicalPath in paths)
+
+            // Game assets, logs, and .spt/.rng caches are excluded
+            assertFalse(spriteAsset.canonicalPath in paths)
+            assertFalse(logFile.canonicalPath in paths)
+            assertFalse(File(newestSuspendDir, "autosave_suspend.spt").canonicalPath in paths)
+            assertFalse(File(newestSuspendDir, "autosave_suspend.rng").canonicalPath in paths)
+
+            // Newest 2 save bundles (autosave_suspend @ 400k and Coop 1 @ 300k) are backed up completely
+            for (extName in listOf("sav", "bas", "rpl")) {
+                assertTrue(File(newestSuspendDir, "autosave_suspend.$extName").canonicalPath in paths)
+                assertTrue(File(mpSaveDir, "Coop 1.$extName").canonicalPath in paths)
+            }
+            assertTrue(File(mpSaveDir, "Coop 1.sloc").canonicalPath in paths)
+
+            // Older saves (Save 2 @ 200k, Save 1 @ 100k) are skipped in cloud backup...
+            assertFalse(File(midSaveDir, "Save 2.sav").canonicalPath in paths)
+            assertFalse(File(oldSaveDir, "Save 1.sav").canonicalPath in paths)
+            // ...while remaining 100% intact on local storage!
+            assertTrue(File(midSaveDir, "Save 2.sav").isFile)
+            assertTrue(File(oldSaveDir, "Save 1.sav").isFile)
+
+            // Device-to-device transfer (2 GB default quota) includes all 4 valid save bundles
+            val d2dPlan = KaMBackupAgent.selectBackupPlan(
+                sharedPrefsDir = sharedPrefs,
+                externalFilesDir = ext,
+                quotaBytes = 0L,
+                isDeviceTransfer = true
+            )
+            assertEquals(4, d2dPlan.includedSaveBundles)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }
