@@ -58,4 +58,6 @@ Follow the upstream project rules in `.ai/rules/` when modifying engine/gameplay
 
 ## 4. Git Workflow
 
+- **Use Pull Requests (Never Push Directly to `main`)**: Do not commit or push directly to `main`. Always branch from `main`, commit your changes on the branch, push the branch to `origin`, and open a Pull Request against `main` (e.g., `gh pr create`).
+- **Monitor CI & Merge**: After opening a PR, monitor the GitHub Actions CI workflow (`.github/workflows/android.yml` — APK build and unit tests, e.g., via `gh pr checks --watch` or `gh run watch`) until all checks pass. If CI fails, diagnose and fix the failure on the PR branch and re-verify. Once CI is green, merge the PR into `main` (e.g., `gh pr merge`) and sync local `main`.
 - **Always Commit When Done**: When a task or conversation is complete, always commit your changes to git (while leaving `src/ext/pascalscript_submodule`'s local toolchain patch uncommitted).
